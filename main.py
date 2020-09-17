@@ -24,6 +24,7 @@ gc: GlobalConfig
 
 
 def run():
+    print("Creating dataset...")
     dataset = CreateDataset(GCONF=gc)  # train, unknown, known
     train_loader, unknown_loader, known_loader = get_data_loader(
         dataset,
@@ -32,6 +33,7 @@ def run():
         is_shuffle=gc.network.is_shuffle_dataset_per_epoch,
     )
 
+    print("Building network...")
     model = cnn.Net(input_size=gc.network.input_size, classify_size=len(dataset.classes))
     device = torch.device("cuda")
 

@@ -1,9 +1,8 @@
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
-import numpy as np
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
@@ -202,11 +201,7 @@ class CustomDataset(Dataset):
 def get_data_loader(dataset: CreateDataset, input_size: tuple, mini_batch: int, is_shuffle: bool):
     # transform
     transform = Compose(
-        [
-            Resize(input_size),
-            ToTensor(),
-            Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ]
+        [Resize(input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
 
     # loader = {'train': [...], 'unknown': [...], 'known': [...]}

@@ -31,10 +31,14 @@ def train_step(
     for x, y in utils.subdivide_batch(
         batch, device, subdivision=subdivision + 1, non_blocking=non_blocking
     ):
+        if x.size()[0] == 0:
+            continue
+
         y_pred = model(x)
         loss = criterion(y_pred, y)
         loss.backward()
-        total_loss += loss.item()
+        # total_loss += loss.item()
+        total_loss += float(loss)
     optimizer.step()
     return total_loss / subdivision  # avg loss in batch.
 

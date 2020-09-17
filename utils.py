@@ -4,6 +4,7 @@ from typing import Any, Dict, Iterator, List, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+
 # import torchvision.utils as vutils
 from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
@@ -85,8 +86,8 @@ def add_to_tensorboard(
         title (str): title of plotted figure.
         step (int, optional): step. Defaults to 0.
     """
-    fig.canvas.draw()
-    img = fig.canvas.renderer._renderer
+    fig.canvas.draw()  # type: ignore
+    img = fig.canvas.renderer._renderer  # type: ignore
     img_ar = np.array(img).transpose(2, 0, 1)
 
     tb_logger.writer.add_image(title, img_ar, step)
@@ -119,34 +120,34 @@ def plot_confusion_matrix(
         _cm = _cm.astype("float") / _cm.sum(axis=1)[:, np.newaxis]
 
     # change font size
-    plt.rcParams["font.size"] = 18
+    plt.rcParams["font.size"] = 18  # type: ignore
 
     fig, axes = plt.subplots(figsize=(10, 10))
 
     # ticklabels
     tick_marks = np.arange(len(classes))
 
-    plt.setp(axes, xticks=tick_marks, xticklabels=classes)
-    plt.setp(axes, yticks=tick_marks, yticklabels=classes)
+    plt.setp(axes, xticks=tick_marks, xticklabels=classes)  # type: ignore
+    plt.setp(axes, yticks=tick_marks, yticklabels=classes)  # type: ignore
     # rotate xticklabels
-    plt.setp(axes.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+    plt.setp(axes.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")  # type: ignore
 
     # title
     plt.suptitle(title)
 
     # label
-    axes.set_ylabel("True label")
-    axes.set_xlabel("Predicted label")
+    axes.set_ylabel("True label")  # type: ignore
+    axes.set_xlabel("Predicted label")  # type: ignore
 
     # grid
     # axes.grid(which='minor', color='b', linestyle='-', linewidth=3)
 
-    img = plt.imshow(cm, interpolation="nearest", cmap=cmap)
+    img = plt.imshow(cm, interpolation="nearest", cmap=cmap)  # type: ignore
 
     # adjust color bar
     divider = make_axes_locatable(axes)
     cax = divider.append_axes("right", size="5%", pad=0.1)
-    fig.colorbar(img, cax=cax)
+    fig.colorbar(img, cax=cax)  # type: ignore
 
     thresh = cm.max() / 2.0
     fmt = ".2f" if normalize else "d"
@@ -154,7 +155,7 @@ def plot_confusion_matrix(
     # plot text
     for i, j in itertools.product(range(len(classes)), range(len(classes))):
         clr = "white" if cm[i, j] > thresh else "black"
-        axes.text(j, i, format(cm[i, j], fmt), ha="center", va="center", color=clr)
+        axes.text(j, i, format(cm[i, j], fmt), ha="center", va="center", color=clr)  # type: ignore
 
     plt.tight_layout()
     fig = plt.gcf()

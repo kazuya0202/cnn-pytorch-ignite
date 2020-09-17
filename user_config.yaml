@@ -1,7 +1,7 @@
 path:
   # dataset: '${your_dataset_path}'
-  # dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
-  dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
+  dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
+  # dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
   # dataset: "./dataset/Images/"
 
   # mistaken: "./dataset/mistaken"
@@ -28,8 +28,8 @@ network:
   channels: 3
 
   epoch: 10
-  batch: 16
-  subdivision: 4
+  batch: 64
+  subdivision: 8
 
   save_cycle: 0
   test_cycle: 1
