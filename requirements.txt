@@ -1,2 +1,9 @@
-# pynvml
+# torch / torchvision
 pytorch-ignite
+pyyaml
+matplotlib
+opencv-python
+pillow
+scikit-learn
+tqdm
+numpy
