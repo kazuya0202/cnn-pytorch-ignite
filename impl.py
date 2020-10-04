@@ -3,10 +3,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import cv2
-import torch
-# import ignite.contrib.handlers.tensorboard_logger as tbl
-from ignite.engine import Events
 import ignite.contrib.handlers.tensorboard_logger as tbl
+import torch
+from ignite.engine import Events
 from ignite.engine.engine import Engine
 from PIL import Image
 from torch.utils.data.dataloader import DataLoader
