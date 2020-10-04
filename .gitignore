@@ -1,5 +1,8 @@
 runs/
 dataset/
+GradCAM_results/
+logs/
+config/
 
 
 ### Python

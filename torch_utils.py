@@ -5,11 +5,13 @@ from typing import Any, Dict, List
 
 from PIL import Image
 from sklearn.model_selection import train_test_split
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, Normalize, ToTensor
 from torchvision.transforms.transforms import Resize
 
-# my packages
+import utils
+from my_typings import T
 from yaml_parser import GlobalConfig
 
 
@@ -30,76 +32,87 @@ class Data:
 
 
 @dataclass
+class MiniBatch:
+    __data: T._batch_path_t
+
+    batch: T._batch_t = field(init=False)
+    path: Tensor = field(init=False)
+
+    def __post_init__(self) -> None:
+        data = self.__data
+        self.batch = (data[0], data[1])
+        self.path = data[2]
+
+
+@dataclass
 class CreateDataset(Dataset):
     r"""Creating dataset.
 
     Args:
         path (str): path of image directory.
         extensions (list): supported extensions.
-        test_size (Union[float, int]): test image size.
+        valid_size (Union[float, int]): valid image size.
         config_path (str, optional): export path of config. Defaults to 'config'.
     """
-    GCONF: GlobalConfig
+    gc: GlobalConfig
 
     def __post_init__(self):
-        # {'train': [], 'unknown': [], 'known': []}
-        self.all_list: Dict[str, List[Data]]
-
-        # {label: 'class name' ...}
-        self.classes: Dict[int, str]
+        self.all_list: Dict[str, List[Data]]  # {'train': [], 'unknown': [], 'known': []}
+        self.classes: Dict[int, str]  # {label: 'class name', ...}
 
         # size of images
-        self.all_size: int  # train_size + unknown_size
+        self.all_size: int
         self.train_size: int
         self.unknown_size: int
         self.known_size: int
 
-        # ----------
+        self._get_dataset()  # train / unknown / known
 
-        self._get_all_datas()  # train / unknown / known
-
-        if self.GCONF.option.is_save_config:
+        if self.gc.option.is_save_config:
             self._write_config()  # write config of model
 
-    def _get_all_datas(self) -> None:
+    def _get_dataset(self) -> None:
         r"""Get all datas from each directory."""
 
         # init
         self.all_list = {"train": [], "unknown": [], "known": []}
         self.classes = {}
 
-        path = Path(self.GCONF.path.dataset)
+        path = Path(self.gc.path.dataset)
 
         # directories in [image_path]
         dirs = [d for d in path.glob("*") if d.is_dir()]
 
         # all extensions / all sub directories
-        for label_idx, _dir in enumerate(dirs):
-            xs = []
-
-            # for ext in self.extensions:
-            for ext in self.GCONF.dataset.extensions:
-                tmp = [
-                    Data(x.as_posix(), label_idx, _dir.name)
-                    for x in _dir.glob(f"*.{ext}")
-                    if x.is_file()
-                ]
-                xs.extend(tmp)
+        for label_idx, dir_ in enumerate(dirs):
+            # xs = []
+            # for ext in self.gc.dataset.extensions:
+            #     tmp = [
+            #         Data(x.as_posix(), label_idx, dir_.name)
+            #         for x in dir_.glob(f"*.{ext}")
+            #         if x.is_file()
+            #     ]
+            #     xs.extend(tmp)
+            xs = [
+                Data(x.as_posix(), label_idx, dir_.name)
+                for ext in self.gc.dataset.extensions
+                for x in dir_.glob(f"*.{ext}")
+                if x.is_file()
+            ]
 
             # adjust to limit size
-            # if self.limit_size is not None:
-            if self.GCONF.dataset.limit_size is not None:
+            if self.gc.dataset.limit_size is not None:
                 random.shuffle(xs)
-                xs = xs[: self.GCONF.dataset.limit_size]
+                xs = xs[: self.gc.dataset.limit_size]
 
             # split dataset
-            train, test = train_test_split(xs, test_size=self.GCONF.dataset.test_size, shuffle=True)
+            train, valid = train_test_split(xs, test_size=self.gc.dataset.valid_size, shuffle=True)
 
             self.all_list["train"].extend(train)
-            self.all_list["unknown"].extend(test)
-            self.all_list["known"].extend(random.sample(train, len(test)))
+            self.all_list["unknown"].extend(valid)
+            self.all_list["known"].extend(random.sample(train, len(valid)))
 
-            self.classes[label_idx] = _dir.name
+            self.classes[label_idx] = dir_.name
 
         self.train_size = len(self.all_list["train"])
         self.unknown_size = len(self.all_list["unknown"])
@@ -110,20 +123,19 @@ class CreateDataset(Dataset):
     def _write_config(self) -> None:
         r"""Writing configs."""
 
-        _dir = Path(self.GCONF.path.config)
-        _dir.mkdir(parents=True, exist_ok=True)
+        dir_ = Path(self.gc.path.config, self.gc.filename_base)
+        dir_.mkdir(parents=True, exist_ok=True)
 
-        def _inner_execute(add_path: str, target: str):
-            pass
-            # path = _dir.joinpath(add_path)
-            # with ul.LogFile(path, std_debug_ok=False, _clear=True) as f:
-            #     for x in self.all_list[target]:
-            #         p = Path(x.path).resolve()  # convert to absolute path
-            #         f.writeline(p.as_posix())
-
-        _inner_execute("train_used_images.txt", "train")  # train
-        _inner_execute("unknown_used_images.txt", "unknown")  # unknown
-        _inner_execute("known_used_images.txt", "known")  # known
+        collect_list = [
+            ("train_used_images.txt", "train"),
+            ("unknown_used_images.txt", "unknown"),
+            ("known_used_images.txt", "known"),
+        ]
+        for fname, target in collect_list:
+            path = dir_.joinpath(fname)
+            with utils.LogFile(path, stdout=False) as f:
+                for x in self.all_list[target]:
+                    f.writeline(str(Path(x.path).resolve()))
 
     def create_dataloader(
         self, batch_size: int = 64, transform: Any = None, is_shuffle: bool = True
@@ -168,7 +180,6 @@ class CustomDataset(Dataset):
     def __post_init__(self):
         self.list_size = len(self.target_list)
 
-    # def __getitem__(self, idx: int) -> Tuple[np.ndarray, int, str]:
     def __getitem__(self, idx: int):
         r"""Returns image data, label, path
 
@@ -179,15 +190,15 @@ class CustomDataset(Dataset):
             tuple: image data, label, path
         """
         x = self.target_list[idx]
-        path, label, name = x.items()
+        path, label, _ = x.items()
 
         img = Image.open(path)
         img = img.convert("RGB")
 
         if self.transform is not None:
             img = self.transform(img)
-        # return img, label, path
-        return img, label
+        return img, label, path
+        # return MiniBatch((img, label), path)
 
     def __len__(self):
         r"""Returns length.
@@ -198,8 +209,7 @@ class CustomDataset(Dataset):
         return self.list_size
 
 
-def get_data_loader(dataset: CreateDataset, input_size: tuple, mini_batch: int, is_shuffle: bool):
-    # transform
+def get_dataloader(dataset: CreateDataset, input_size: tuple, mini_batch: int, is_shuffle: bool):
     transform = Compose(
         [Resize(input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )

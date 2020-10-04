@@ -1,46 +1,119 @@
 import itertools
-from typing import Any, Dict, Iterator, List, Union
+from dataclasses import dataclass, field
+from io import TextIOWrapper
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
-# import torchvision.utils as vutils
 from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 from ignite.engine.engine import Engine
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from tqdm import tqdm
 
 from my_typings import T
+
+
+@dataclass
+class LogFile:
+    path: Optional[T._path_t] = None
+    stdout: bool = False
+    clear: bool = False
+
+    _is_write: bool = field(init=False)
+    _path: Path = field(init=False)
+    _file: TextIOWrapper = field(init=False)
+
+    def __post_init__(self):
+        if self.path is None:
+            self._is_write = False
+            return
+
+        self._path = Path(self.path)
+        self._is_write = True
+
+        if self.clear:
+            self._clear()
+
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._path.touch(exist_ok=True)
+
+        # open file as append mode.
+        self._file = self._path.open("a")
+
+    def write(self, line: object = "", stdout: Optional[bool] = None) -> None:
+        self._write(f"{line}", f"\r{line}", stdout=self._is_stdout(stdout))
+
+    def writeline(self, line: object = "", stdout: Optional[bool] = None) -> None:
+        self._write(content=f"{line}\n", line=f"{line}\n", stdout=self._is_stdout(stdout))
+
+    def _write(self, content: str, line: object, stdout: bool) -> None:
+        """
+        Args:
+            content (str): write `content` to file.
+            line (object): output `line` as stdout.
+        """
+        if self._is_write:
+            self._file.write(content)
+
+        if stdout:
+            print(line, end="")
+
+    def _clear(self) -> None:
+        if not self._is_write:
+            return
+
+        if self._path.exists():
+            self._path.unlink()  # delete
+        self._path.touch()  # create
+
+    def _is_stdout(self, stdout: Optional[bool]) -> bool:
+        # priority `stdout` argument.
+        return stdout if stdout is not None else self.stdout
+
+    def close(self) -> None:
+        if self._is_write:
+            self._file.close()
+
+    def __enter__(self) -> "LogFile":
+        return self
+
+    def __exit__(self, t, v, tb) -> None:
+        self.close()
 
 
 class MyProgressBar(ProgressBar):
     def __init__(
         self,
+        logfile: LogFile = LogFile(),
         persist=False,
         bar_format="{desc}[{n_fmt}/{total_fmt}] {percentage:3.0f}%|{bar}{postfix} [{elapsed}<{remaining}]",
-        **tqdm_kwargs
+        **tqdm_kwargs,
     ) -> None:
         super().__init__(persist, bar_format, **tqdm_kwargs)
+        self.logfile = logfile
 
-    def log_message(self, message: str = "", stdout_verbose: bool = True):
+    def log_message(self, message: str = "", stdout: bool = True):
         """
         Logs a message, preserving the progress bar correct output format.
 
         Args:
             message (str): string you wish to log.
-            verbose (bool): output verbose stdout.
+            stdout (bool): output verbose stdout.
         """
-        if not stdout_verbose:
-            # 必要ならファイルにだけ書き出す
+        self.logfile.writeline(message, stdout=False)
+        if not stdout:
             return
 
-        from tqdm import tqdm
+        # tqdm.write(message, file=self.tqdm_kwargs.get("file", None))
+        tqdm.write(message)
 
-        tqdm.write(message, file=self.tqdm_kwargs.get("file", None))
 
-
-def prepare_batch(batch: T._BATCH, device: torch.device, non_blocking: bool = False,) -> T._BATCH:
+def prepare_batch(
+    batch: T._batch_t, device: torch.device, non_blocking: bool = False,
+) -> T._batch_t:
     x, y = batch
     return (
         x.to(device=device, non_blocking=non_blocking),
@@ -49,19 +122,38 @@ def prepare_batch(batch: T._BATCH, device: torch.device, non_blocking: bool = Fa
 
 
 def subdivide_batch(
-    batch: T._BATCH, device: torch.device, subdivision: int, non_blocking: bool = False,
-) -> Iterator[T._BATCH]:
+    batch: T._batch_t, device: torch.device, subdivisions: int, non_blocking: bool = False,
+) -> Iterator[T._batch_t]:
     x, y = batch
-    sep = np.linspace(start=0, stop=len(x), num=subdivision + 1, dtype=np.int)
+    sep = np.linspace(start=0, stop=len(x), num=subdivisions + 1, dtype=np.int)
 
     for n, m in zip(sep[:-1], sep[1:]):
         batch = (x[n:m], y[n:m])
+        if batch[0].size()[0] == 0:
+            continue
         yield prepare_batch(batch, device, non_blocking=non_blocking)
 
 
 def attach_metrics(evaluator: Engine, metrics: Dict[str, Any]) -> None:
     for name, metric in metrics.items():
         metric.attach(evaluator, name)
+
+
+def create_schedule(max_epoch: int, cycle: int) -> List[bool]:
+    if cycle == 0:
+        return [*[False] * (max_epoch - 1), True]  # [-1] is only True.
+
+    # range(N - 1) -> last epoch is True.
+    _ = [(i + 1) % cycle == 0 for i in range(max_epoch - 1)]
+    return [*_, True]
+
+
+def create_filepath(dir_: T._path_t, name: str, is_prefix_seq: bool = False, ext: str = "txt") -> str:
+    if isinstance(dir_, str):
+        dir_ = Path(dir_)
+    prefix = "" if not is_prefix_seq else f"{len([x for x in dir_.glob(f'*.{ext}')])}_"
+    path = dir_.joinpath(f"{prefix}{name}.{ext}")
+    return str(path)
 
 
 # def log_generated_images(tag, fake_buffer):

@@ -1,173 +1,154 @@
-from typing import Tuple
+from argparse import ArgumentParser, Namespace
+from typing import List, Tuple
+
 import ignite.contrib.handlers.tensorboard_logger as tbl
-from ignite.engine.engine import Engine
-from ignite.metrics.running_average import RunningAverage
-
-import torch
 from ignite.engine import Events
-
-# from ignite.engine import create_supervised_trainer, create_supervised_evaluator
-from ignite.handlers import ModelCheckpoint
-from ignite.metrics import Accuracy, Loss, ConfusionMatrix
-from torch import Tensor, nn
-from torch.optim import Adam
+from ignite.engine.engine import Engine
+from ignite.metrics import Accuracy, ConfusionMatrix, Loss
+from ignite.metrics.running_average import RunningAverage
+from torch import nn, optim
+from torch.utils.data.dataloader import DataLoader
 
 # my packages
-import cnn
-from torch_utils import CreateDataset, get_data_loader
-from yaml_parser import GlobalConfig, parse
-import utils
 import impl
-from my_typings import Names, T
+import torch_utils as tutils
+import utils
+from gradcam import ExecuteGradCAM
+from my_typings import State, T
+from torch_utils import CreateDataset, get_dataloader
+from yaml_parser import GlobalConfig, parse
 
 gc: GlobalConfig
 
 
-def run():
-    print("Creating dataset...")
-    dataset = CreateDataset(GCONF=gc)  # train, unknown, known
-    train_loader, unknown_loader, known_loader = get_data_loader(
+def run() -> None:
+    print(f"Creating dataset from '{gc.path.dataset}'...")
+    dataset = CreateDataset(gc=gc)  # train, unknown, known
+    train_loader, unknown_loader, known_loader = get_dataloader(
         dataset,
         input_size=gc.network.input_size,
         mini_batch=gc.network.batch,
-        is_shuffle=gc.network.is_shuffle_dataset_per_epoch,
+        is_shuffle=gc.dataset.is_shuffle_per_epoch,
     )
 
     print("Building network...")
-    model = cnn.Net(input_size=gc.network.input_size, classify_size=len(dataset.classes))
-    device = torch.device("cuda")
+    classes = list(dataset.classes.values())
+    device = gc.network.device
 
-    model.to(device=device)
-    optimizer = Adam(model.parameters())
-    criterion = nn.CrossEntropyLoss()
+    net = gc.network.class_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
+    model = impl.Model(
+        net=net,
+        optimizer=optim.Adam(net.parameters()),
+        criterion=nn.CrossEntropyLoss(),
+        device=device,
+    )
+    del net
 
-    def train_step(engine: Engine, batch: Tuple[Tensor, Tensor]):
-        return impl.train_step(
-            batch, model, optimizer, criterion, device, subdivision=gc.network.subdivision
+    # logfile
+    if gc.option.is_save_log:
+        p = utils.create_filepath(gc.path.log, gc.filename_base, is_prefix_seq=True)
+        gc.log = utils.LogFile(p, stdout=False)
+
+    # netword difinition
+    if gc.option.is_show_network_difinition:
+        impl.show_network_difinition(gc, model, dataset)
+
+    gcam = ExecuteGradCAM(
+        classes,
+        gc.network.input_size,
+        gc.gradcam.layer,
+        gpu_enabled=(gc.network.gpu_enabled and gc.gradcam.gpu_enabled),
+        is_gradcam=gc.gradcam.enabled,
+    )
+
+    def train_step(engine: Engine, batch: T._batch_path_t):
+        minibatch = tutils.MiniBatch(batch)
+        return impl.train_step(minibatch, model, device, subdivisions=gc.network.subdivisions)
+
+    def unknown_validation_step(engine: Engine, batch: T._batch_path_t):
+        minibatch = tutils.MiniBatch(batch)
+        epoch = engine.state.epoch
+        return impl.validation_step(
+            minibatch, model, device, epoch, gc, gcam, "unknown", non_blocking=False
         )
 
-    def validation_step(engine: Engine, batch: T._BATCH):
-        return impl.validation_step(batch, model, device, non_blocking=False)
+    def known_validation_step(engine: Engine, batch: T._batch_path_t):
+        minibatch = tutils.MiniBatch(batch)
+        epoch = engine.state.epoch
+        return impl.validation_step(
+            minibatch, model, device, epoch, gc, gcam, "known", non_blocking=False
+        )
 
-    # trainer = create_supervised_trainer(model, optimizer, criterion, device=device)
+    # trainer / evaluator
     trainer = Engine(train_step)
+    unknown_evaluator = Engine(unknown_validation_step)
+    known_evaluator = Engine(known_validation_step)
 
-    metrics = {"acc": Accuracy(), "loss": Loss(criterion)}
-    metrics_with_cm = {
+    metrics = {
         "acc": Accuracy(),
-        "loss": Loss(criterion),
-        "cm": ConfusionMatrix(len(dataset.classes)),
+        "loss": Loss(model.criterion),
+        "cm": ConfusionMatrix(len(classes)),
     }
-
-    # train_evaluator = create_supervised_evaluator(model, metrics=metrics, device=device)
-    # unknown_evaluator = create_supervised_evaluator(model, metrics=metrics_with_cm, device=device)
-    # known_evaluator = create_supervised_evaluator(model, metrics=metrics_with_cm, device=device)
-    train_evaluator = Engine(validation_step)
-    unknown_evaluator = Engine(validation_step)
-    known_evaluator = Engine(validation_step)
-
-    utils.attach_metrics(train_evaluator, metrics)
-    utils.attach_metrics(unknown_evaluator, metrics_with_cm)
-    utils.attach_metrics(known_evaluator, metrics_with_cm)
+    utils.attach_metrics(unknown_evaluator, metrics)
+    utils.attach_metrics(known_evaluator, metrics)
 
     RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
 
-    pbar = utils.MyProgressBar(persist=True)
+    # progress bar
+    pbar = utils.MyProgressBar(persist=True, logfile=gc.log)
     pbar.attach(trainer, metric_names="all")
 
-    tb_logger = tbl.TensorboardLogger()
-    if False:
-        attach_num = 1
+    collect_list = [
+        (unknown_evaluator, unknown_loader, State.UNKNOWN_VALID),
+        (known_evaluator, known_loader, State.KNOWN_VALID),
+    ]
+
+    tb_logger = None
+    if gc.option.log_tensorboard:
         tb_logger = tbl.TensorboardLogger()
-        # tb_logger = tbl.TensorboardLogger(log_dir=gc.path.tensorboard_log)
 
-        tb_logger.attach_output_handler(
-            trainer,
-            event_name=Events.ITERATION_COMPLETED(every=attach_num),
-            tag="training",  # type: ignore
-            output_transform=lambda loss: {"batchloss": loss},  # type: ignore
-            metric_names="all",  # type: ignore
-        )
+    # tensorboard
+    if tb_logger and False:  # debug
+        impl.log_tensorboard(tb_logger, trainer, collect_list, model)
 
-        _list = [
-            ("training", train_evaluator),
-            ("unknown validation", unknown_evaluator),
-            ("known validation", known_evaluator),
-        ]
-        for tag, evaluator in _list:
-            tb_logger.attach_output_handler(
-                evaluator,
-                event_name=Events.EPOCH_COMPLETED,
-                tag=tag,
-                metric_names=["loss", "acc"],  # type: ignore
-                global_step_transform=tbl.global_step_from_engine(trainer),  # type: ignore
+    # schedule
+    valid_schedule = utils.create_schedule(gc.network.epoch, gc.network.valid_cycle)
+    save_schedule = utils.create_schedule(gc.network.epoch, gc.network.save_cycle)
+    if not gc.network.is_save_final_model:
+        save_schedule[-1] = False
+
+    def validate_model(engine: Engine, collect_list: List[Tuple[Engine, DataLoader, str]]):
+        if valid_schedule[engine.state.epoch - 1]:
+            impl.validate_model(
+                engine, collect_list, pbar, classes, tb_logger, verbose=gc.option.verbose,
             )
 
-        tb_logger.attach_opt_params_handler(
-            trainer, event_name=Events.ITERATION_COMPLETED(every=attach_num), optimizer=optimizer  # type: ignore
-        )
+    def save_model(engine: Engine):
+        epoch = engine.state.epoch
+        if save_schedule[epoch - 1]:
+            impl.save_model(model, classes, gc, epoch)
 
-        tb_logger.attach(
-            trainer,
-            log_handler=tbl.WeightsScalarHandler(model),
-            event_name=Events.ITERATION_COMPLETED(every=attach_num),
-        )
-
-        tb_logger.attach(
-            trainer,
-            log_handler=tbl.WeightsHistHandler(model),
-            event_name=Events.EPOCH_COMPLETED(every=attach_num),
-        )
-
-        tb_logger.attach(
-            trainer,
-            log_handler=tbl.GradsScalarHandler(model),
-            event_name=Events.ITERATION_COMPLETED(every=attach_num),
-        )
-
-        tb_logger.attach(
-            trainer,
-            log_handler=tbl.GradsHistHandler(model),
-            event_name=Events.EPOCH_COMPLETED(every=attach_num),
-        )
-
-    # def score_function(engine):
-    #     return engine.state.metrics["accuracy"]
-
-    # model_checkpoint = ModelCheckpoint(
-    #     log_dir,
-    #     n_saved=2,
-    #     filename_prefix="best",
-    #     score_function=score_function,
-    #     score_name="validation_accuracy",
-    #     global_step_transform=global_step_from_engine(trainer),
-    # )
-    # validation_evaluator.add_event_handler(Events.COMPLETED, model_checkpoint, {"model": model})
-
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def log_results(engine: Engine):
-        _list = [
-            (train_evaluator, train_loader, Names.TRAINING),
-            (unknown_evaluator, unknown_loader, Names.UNKNOWN_VALID),
-            (known_evaluator, known_loader, Names.KNOWN_VALID),
-        ]
-        impl.log_results(
-            engine,
-            _list,
-            pbar,
-            classes=list(dataset.classes.values()),
-            tb_logger=tb_logger,
-            verbose=gc.option.verbose,
-        )
+    # validate / save
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, validate_model, collect_list)
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, save_model)
 
     # kick everything off
-    trainer.run(train_loader, max_epochs=3)
+    trainer.run(train_loader, max_epochs=gc.network.epoch)
 
-    tb_logger.close()
+    if gc.option.log_tensorboard:
+        tb_logger.close()
+
+
+def parse_arg() -> Namespace:
+    parser = ArgumentParser()
+    parser.add_argument("-c", "--cfg", help="config file", default="user_config.yaml")
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    path = "./user_config.yaml"
-    gc = parse(path=path)
+    args = parse_arg()
+    print(f"Loading config from '{args.cfg}'...")
+    gc = parse(path=args.cfg)
 
     run()

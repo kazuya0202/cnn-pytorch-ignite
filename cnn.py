@@ -3,14 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# default network parameters.
-input_size = (60, 60)
-classify_size = 1
-in_channels = 3
-
-
 class Net(nn.Module):
-    def __init__(self, input_size: tuple = (60, 60), classify_size: int = 3, in_channels: int = 3) -> None:
+    def __init__(
+        self, input_size: tuple = (60, 60), classify_size: int = 3, in_channels: int = 3
+    ) -> None:
         super(Net, self).__init__()
 
         height = input_size[0] // 4  # `4` depends on max_pool2d.
@@ -27,6 +23,7 @@ class Net(nn.Module):
         self.fc7 = nn.Linear(2048, 512)
         self.fc8 = nn.Linear(512, classify_size)
 
+    # @profile
     def forward(self, x) -> torch.Tensor:
         x = F.relu(self.conv1(x))
         x = self.bn1(x)
@@ -46,6 +43,68 @@ class Net(nn.Module):
         # don't run `softmax()` because of softmax process in CrossEntropyLoss
         # x = F.softmax(x)
 
+        return x
+
+
+class VGG16(nn.Module):
+    def __init__(self, input_size: tuple = (60, 60), classify_size: int = 3, in_channels: int = 3):
+        super(VGG16, self).__init__()
+
+        height = input_size[0] // 32
+        width = input_size[1] // 32
+
+        self.features = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
+            nn.Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
+            nn.Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
+            nn.Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
+            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1)),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False),
+        )
+
+        self.avgpool = nn.AdaptiveAvgPool2d(output_size=(7, 7))
+
+        self.classifier = nn.Sequential(
+            nn.Linear(512 * height * width, 4096, bias=True),  # (25088, 4096)
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5, inplace=False),
+            nn.Linear(4096, 4096, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.5, inplace=False),
+            nn.Linear(4096, classify_size, bias=True),
+        )
+
+    def forward(self, x):
+        x = self.features(x)
+        # print(x.size())
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.classifier(x)
         return x
 
 

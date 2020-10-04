@@ -1,4 +1,12 @@
 
-main.py:
-  ☐ confusion matrix
-  ☐ subdivision feature  # https://pytorch.org/ignite/quickstart.html#explanation
+all:
+  confusion matrix
+  subdivision feature  # https://pytorch.org/ignite/quickstart.html#explanation
+
+  -unused prepare two way to specify train/test image.
+    split train/test image by random number from dataset.
+    -unused specify train/test image by enumerate files like darknet.
+
+  implement gradcam
+
+  ☐ implement lr_scheduler (StepLR | lambda)

@@ -1,26 +1,34 @@
 path:
-  # dataset: '${your_dataset_path}'
-  dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
+  # dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
+  dataset: 'D:\workspace\pro\__dataset\bird_by_yokoyama'
   # dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
   # dataset: "./dataset/Images/"
 
-  # mistaken: "./dataset/mistaken"
+  # mistaken: "./mistaken"
   # model: "./dataset"
-  # config: "./dataset/config"
-  # log: "./dataset/logs"
-  # gradcam: "./dataset/GradCAM_results"
-  # tensorboard_log: "./dataset/tensorboard_logs"
+  # config: "./config"
+  # log: "./logs"
+  # gradcam: "./GradCAM_results"
 
 dataset:
-  limit_size: -1
-  test_size: 0.1
-  extensions: ["jpg", "png", "jpeg"]
+  limit_size: 100
+  valid_size: 0.1  # if `use_enum_txt` is true, `valid_size` is ignored.
+  extensions: ["jpg", "png", "jpeg", "bmp"]
+
+  # use_enum_txt: false
+  # classes: ''
+  # train_txt: ''
+  # valid_txt: ''
+
+  is_shuffle_per_epoch: true
 
 gradcam:
   # enabled: true
   enabled: false
   only_mistaken: true
   layer: "conv5"
+
+  gpu_enabled: false
 
 network:
   height: 60
@@ -29,27 +37,27 @@ network:
 
   epoch: 10
   batch: 64
-  subdivision: 8
+  subdivisions: 32
 
   save_cycle: 0
-  test_cycle: 1
+  valid_cycle: 1
 
   gpu_enabled: true
-  # is_save_final_model: true
-  is_save_final_model: false
-  is_shuffle_dataset_per_epoch: true
+  is_save_final_model: true
+  # is_save_final_model: false
+
+  class_name: "Net"  # ["Net", "VGG16"] in cnn.py
 
 option:
-  is_show_network_difinition: true
-  verbose: false
+  is_show_network_difinition: false
+  verbose: true
 
-  is_debug: true
-  is_save_debug_log: true # depends on `is_debug`.
-  is_save_rate_log: true # depends on `is_debug`.
-  is_save_mistaken_pred: false # depends on `is_debug`.
-  is_save_config: true # depends on `is_debug`.
-  is_save_runs: false # depends on `is_debug`.
+  # is_debug: true
+  is_save_log: false
+  # is_save_mistaken_pred: false
+  is_save_config: false
+  log_tensorboard: true
 
-  is_available_re_training: false
-  re_training: false
-  load_model_path: ""
+  # is_available_re_training: false
+  # re_training: false
+  # load_model_path: ""
