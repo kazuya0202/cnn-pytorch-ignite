@@ -73,10 +73,11 @@ class Network_:
         self.gpu_enabled = torch.cuda.is_available() and self.gpu_enabled
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
 
-        if self.class_name == "VGG16":
-            self.class_ = cnn.VGG16
-        elif self.class_name == "LightNet":
-            self.class_ = cnn.LightNet
+        self.class_ = eval(f"cnn.{self.class_name}")
+        # if self.class_name == "VGG16":
+        #     self.class_ = cnn.VGG16
+        # elif self.class_name == "LightNet":
+        #     self.class_ = cnn.LightNet
 
 
 @dataclass

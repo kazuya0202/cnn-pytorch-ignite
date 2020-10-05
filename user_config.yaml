@@ -1,9 +1,9 @@
 path:
-  # dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
+  dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
   # dataset: 'D:\workspace\pro\__dataset\bird_by_yokoyama'
   # dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
   # dataset: "./dataset/Images/"
-  dataset: 'C:\ichiya\prcn2019\prcn2019-datasets\datasets\Images-20191014'
+  # dataset: 'C:\ichiya\prcn2019\prcn2019-datasets\datasets\Images-20191014'
 
   mistaken: "./mistaken"
   model: "./models"
@@ -12,28 +12,31 @@ path:
   gradcam: "./GradCAM_results"
 
 dataset:
-  limit_size: -1
-  valid_size: 0.1
+  limit_size: 1000
+  valid_size: 30
   extensions: ["jpg", "png", "jpeg", "bmp"]
 
   is_shuffle_per_epoch: true
 
 gradcam:
-  # enabled: true
-  enabled: false
-  only_mistaken: true
+  # enabled: false
+  enabled: true
+  only_mistaken: false
   layer: "conv5"
 
   gpu_enabled: false
+  # gpu_enabled: true
 
 network:
-  height: 60
-  width: 60
+  height: 64
+  width: 64
+  # height: 60
+  # width: 60
   channels: 3
 
-  epoch: 10
+  epoch: 5
   batch: 64
-  subdivisions: 64
+  subdivisions: 32
 
   save_cycle: 0
   valid_cycle: 1
@@ -50,7 +53,7 @@ option:
   verbose: true
 
   # is_debug: true
-  is_save_log: false
+  # is_save_log: true
   is_save_mistaken_pred: false
-  is_save_config: false
-  log_tensorboard: false
+  # is_save_config: true
+  # log_tensorboard: true

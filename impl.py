@@ -64,10 +64,10 @@ def train_step(
 
 
 def validation_step(
+    engine: Engine,
     minibatch: tutils.MiniBatch,
     model: Model,
     device: torch.device,
-    epoch: int,
     gc: GlobalConfig,
     gcam: ExecuteGradCAM,
     name: str = "known",
@@ -80,7 +80,7 @@ def validation_step(
 
         ans = int(y[0].item())
         pred = int(torch.max(y_pred.data, 1)[1].item())
-        exec_gradcam(gc, gcam, model, str(minibatch.path[0]), epoch, ans, pred, name)
+        execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, name)
 
         return y_pred, y
 
@@ -131,12 +131,12 @@ def validate_model(
     pbar.n = pbar.last_print_n = 0  # type: ignore
 
 
-def exec_gradcam(
+def execute_gradcam(
+    engine: Engine,
     gc: GlobalConfig,
     gcam: ExecuteGradCAM,
     model: Model,
     path: T._path_t,
-    epoch: int,
     ans: int,
     pred: int,
     phase: str,
@@ -144,6 +144,8 @@ def exec_gradcam(
     # do not execute / execute only mistaken
     if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and ans == pred)]):
         return
+    epoch = engine.state.epoch
+    iteration = engine.state.iteration
 
     gcam_base_dir = Path(gc.path.gradcam)
     epoch_str = f"epoch{epoch}"
@@ -152,21 +154,22 @@ def exec_gradcam(
         gcam_base_dir, concat=[f"{phase}_mistaken", epoch_str], is_make=True
     )
     correct_dir = None
-    if gc.gradcam.only_mistaken:
+    if not gc.gradcam.only_mistaken:
         correct_dir = utils.concat_path_and_mkdir(
             gcam_base_dir, concat=[f"{phase}_correct", epoch_str], is_make=True
         )
 
     ret = gcam.main(model.net, str(path))
-    for phase, dat_list in ret.items():  # name: "gradcam", "vanilla" ...
+    for phase, dat_list in ret.items():  # phase: "gradcam", "vanilla" ...
         for i, img_dat in enumerate(dat_list):
-            s = f"{gcam.classes[i]}_{phase}_pred{pred}_correct{ans}.jpg"
+            s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].jpg"
             path_ = correct_dir.joinpath(s) if ans == pred else mistaken_dir.joinpath(s)
 
             # save
-            pil_img = Image.fromarray(cv2.cvtColor(img_dat, cv2.COLOR_BGR2RGB))  # type: ignore
-            pil_img.save(str(path_))
-            # print(path_)
+            # pil_img = Image.fromarray(cv2.cvtColor(img_dat, cv2.COLOR_BGR2RGB))  # type: ignore
+            # pil_img.save(str(path_))
+            print(path_)
+    del ret
 
 
 def save_model(model: Model, classes: List[str], gc: GlobalConfig, epoch: int):
@@ -231,7 +234,9 @@ def log_tensorboard(
     )
 
 
-def show_network_difinition(gc: GlobalConfig, model: Model, dataset: tutils.CreateDataset) -> None:
+def show_network_difinition(
+    gc: GlobalConfig, model: Model, dataset: tutils.CreateDataset, stdout: bool = False
+) -> None:
     r"""Show network difinition on console.
 
     Args:
@@ -281,7 +286,7 @@ def show_network_difinition(gc: GlobalConfig, model: Model, dataset: tutils.Crea
             _dict (Dict[str, Any]): show contents.
             head (str, optional): show before showing contents. Defaults to ''.
         """
-        gc.log.writeline(header, stdout=True)
+        gc.log.writeline(header, stdout=stdout)
 
         # adjust to max length of key
         max_len = max([len(x) for x in _dict.keys()])
@@ -292,8 +297,8 @@ def show_network_difinition(gc: GlobalConfig, model: Model, dataset: tutils.Crea
             if isinstance(v, str) and v.find("\n") > -1:
                 v = v.replace("\n", "\n" + " " * (max_len + 3)).rstrip()
 
-            gc.log.writeline(f"{k.center(max_len)} : {v}", stdout=True)
-        gc.log.writeline("", stdout=True)
+            gc.log.writeline(f"{k.center(max_len)} : {v}", stdout=stdout)
+        gc.log.writeline("", stdout=stdout)
 
     classes = {str(k): v for k, v in dataset.classes.items()}
 

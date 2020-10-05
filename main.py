@@ -55,8 +55,7 @@ def run() -> None:
         gc.log = utils.LogFile(p, stdout=False)
 
     # netword difinition
-    if gc.option.is_show_network_difinition:
-        impl.show_network_difinition(gc, model, dataset)
+    impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
 
     gcam = ExecuteGradCAM(
         classes,
@@ -72,16 +71,14 @@ def run() -> None:
 
     def unknown_validation_step(engine: Engine, batch: T._batch_path_t):
         minibatch = tutils.MiniBatch(batch)
-        epoch = engine.state.epoch
         return impl.validation_step(
-            minibatch, model, device, epoch, gc, gcam, "unknown", non_blocking=False
+            engine, minibatch, model, device, gc, gcam, "unknown", non_blocking=False
         )
 
     def known_validation_step(engine: Engine, batch: T._batch_path_t):
         minibatch = tutils.MiniBatch(batch)
-        epoch = engine.state.epoch
         return impl.validation_step(
-            minibatch, model, device, epoch, gc, gcam, "known", non_blocking=False
+            engine, minibatch, model, device, gc, gcam, "known", non_blocking=False
         )
 
     # trainer / evaluator

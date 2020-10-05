@@ -79,8 +79,9 @@ def get_data_of_gradient(gradient: Tensor) -> Tensor:
     gradient /= gradient.max()
     gradient *= 255.0
 
-    gradient = np.uint8(gradient)  # type: ignore
-    return gradient
+    np_gradient = np.uint8(gradient)  # type: ignore
+    del gradient
+    return np_gradient
 
 
 def get_data_of_gradcam(gcam: Tensor, raw_image: Tensor, paper_cmap: bool = False) -> Tensor:
@@ -102,8 +103,9 @@ def get_data_of_gradcam(gcam: Tensor, raw_image: Tensor, paper_cmap: bool = Fals
     else:
         gcam = (cmap.astype(np.float) + raw_image.clone().cpu().numpy().astype(np.float)) / 2
 
-    gcam = np.uint8(gcam)  # type: ignore
-    return gcam
+    np_gcam = np.uint8(gcam)  # type: ignore
+    del gcam
+    return np_gcam
 
 
 @dataclass
@@ -161,7 +163,6 @@ class ExecuteGradCAM:
 
         self.device = next(model.parameters()).device
         ret = {}
-        # self.input_size = (100, 100)  # debug
 
         # convert to list
         if isinstance(image_path, tuple):
@@ -177,7 +178,7 @@ class ExecuteGradCAM:
 
         if not self.gpu_enabled:
             model.to(restore_device)
-        return ret
+        return ret.copy()
 
     def _execute_one_image(self, model: T._net_t, image_path: str) -> dict:
         """Process one image.
@@ -221,9 +222,12 @@ class ExecuteGradCAM:
         if self.is_gradcam:
             gcam = GradCAM(model=model)
             _ = gcam.forward(image)
+            del _
 
             gbp = GuidedBackPropagation(model=model)
             _ = gbp.forward(image)
+            del _
+        return processed_data
 
         pbar = tqdm(
             range(self.class_num),
@@ -283,9 +287,8 @@ class ExecuteGradCAM:
             gcam.remove_hook()
             gbp.remove_hook()
 
-        del bp, gbp, gcam, image, raw_image
-
-        return processed_data
+        del ids, bp, gbp, gcam, image, raw_image
+        return processed_data.copy()
 
     def _execute_multi_images(self, model: T._net_t, image_paths: List[str]) -> dict:
         r"""Process multiple images.
