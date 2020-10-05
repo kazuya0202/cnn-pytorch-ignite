@@ -125,7 +125,8 @@ def subdivide_batch(
     batch: T._batch_t, device: torch.device, subdivisions: int, non_blocking: bool = False,
 ) -> Iterator[T._batch_t]:
     x, y = batch
-    sep = np.linspace(start=0, stop=len(x), num=subdivisions + 1, dtype=np.int)
+    batch_len = x.size()[0]
+    sep = np.linspace(start=0, stop=batch_len, num=subdivisions + 1, dtype=np.int)
 
     for n, m in zip(sep[:-1], sep[1:]):
         batch = (x[n:m], y[n:m])
@@ -148,7 +149,9 @@ def create_schedule(max_epoch: int, cycle: int) -> List[bool]:
     return [*_, True]
 
 
-def create_filepath(dir_: T._path_t, name: str, is_prefix_seq: bool = False, ext: str = "txt") -> str:
+def create_filepath(
+    dir_: T._path_t, name: str, is_prefix_seq: bool = False, ext: str = "txt"
+) -> str:
     if isinstance(dir_, str):
         dir_ = Path(dir_)
     prefix = "" if not is_prefix_seq else f"{len([x for x in dir_.glob(f'*.{ext}')])}_"
@@ -156,15 +159,13 @@ def create_filepath(dir_: T._path_t, name: str, is_prefix_seq: bool = False, ext
     return str(path)
 
 
-# def log_generated_images(tag, fake_buffer):
-#     def wrapper(engine, logger, event_name):
-#         res = vutils.make_grid(torch.cat(fake_buffer, dim=0), padding=2, normalize=True)
-#         res = res.detach().cpu()
-#         state = engine.state
-#         global_step = state.get_event_attrib_value(event_name)
-#         logger.writer.add_image(tag=tag, img_tensor=res, global_step=global_step, dataformats="CHW")
-
-#     return wrapper
+def concat_path_and_mkdir(
+    base_path: T._path_t, concat: Union[T._path_t, List[T._path_t]], is_make: bool = False
+) -> Path:
+    fp = Path(base_path, *concat) if isinstance(concat, list) else Path(base_path, concat)
+    if is_make:
+        fp.mkdir(parents=True, exist_ok=True)
+    return fp
 
 
 def add_to_tensorboard(

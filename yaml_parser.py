@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 
 import torch
@@ -12,12 +13,12 @@ from my_typings import T
 
 @dataclass
 class Path_:
-    dataset: str = r"./dataset"
-    mistaken: str = r"./mistaken"
-    model: str = r"./"
-    config: str = r"./config"
-    log: str = r"./logs"
-    gradcam: str = r"./GradCAM_results"
+    dataset: T._path_t = r"./dataset"
+    mistaken: T._path_t = r"./mistaken"
+    model: T._path_t = r"./models"
+    config: T._path_t = r"./config"
+    log: T._path_t = r"./logs"
+    gradcam: T._path_t = r"./GradCAM_results"
 
 
 @dataclass
@@ -28,27 +29,12 @@ class Dataset_:
 
     is_shuffle_per_epoch: bool = True
 
-    # use_enum_txt: bool = False
-    # train_txt: T._path_t = ""
-    # valid_txt: T._path_t = ""
-
     def __post_init__(self) -> None:
         if self.limit_size == -1:
             self.limit_size = None
 
         if not self.extensions:
             self.extensions = ["jpg", "png", "jpeg", "bmp"]
-
-        # if self.use_enum_txt:
-        #     self.train_txt = Path(self.train_txt)
-        #     self.valid_txt = Path(self.valid_txt)
-
-        #     self.check_exist(self.train_txt)
-        #     self.check_exist(self.valid_txt)
-
-    # def check_exist(self, path: Path) -> None:
-    #     if not path.exists():
-    #         raise FileNotFoundError(f"'{path}' is not exist.")
 
 
 @dataclass
@@ -89,6 +75,8 @@ class Network_:
 
         if self.class_name == "VGG16":
             self.class_ = cnn.VGG16
+        elif self.class_name == "LightNet":
+            self.class_ = cnn.LightNet
 
 
 @dataclass
@@ -96,16 +84,11 @@ class Option_:
     is_show_network_difinition: bool = True
     verbose: bool = True
 
-    is_debug: bool = False
+    # is_debug: bool = False
     is_save_log: bool = True
-    # is_save_rate_log: bool = True
     is_save_mistaken_pred: bool = False
     is_save_config: bool = True
     log_tensorboard: bool = False
-
-    # is_available_re_training: bool = False
-    # re_training: bool = False
-    # load_model_path: str = r""
 
 
 @dataclass
@@ -142,6 +125,24 @@ class GlobalConfig:
 
         self.filename_base = datetime.now().strftime("%Y%b%d_%Hh%Mm%Ss")
         self.log = utils.LogFile(stdout=False)
+
+        # determine directory structure / make directory
+        self.path.mistaken = utils.concat_path_and_mkdir(
+            self.path.mistaken, self.filename_base, is_make=self.option.is_save_mistaken_pred
+        )
+        self.path.model = utils.concat_path_and_mkdir(
+            self.path.model,
+            self.filename_base,
+            is_make=self.network.save_cycle != 0 or self.network.is_save_final_model,
+        )
+        self.path.config = utils.concat_path_and_mkdir(
+            self.path.config, self.filename_base, is_make=self.option.is_save_config
+        )
+        self.path.gradcam = utils.concat_path_and_mkdir(
+            self.path.gradcam, self.filename_base, is_make=self.gradcam.enabled
+        )
+
+        Path(self.path.log).mkdir(parents=True, exist_ok=True)
 
 
 def parse(path: str) -> GlobalConfig:

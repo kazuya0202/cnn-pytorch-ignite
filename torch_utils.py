@@ -123,8 +123,7 @@ class CreateDataset(Dataset):
     def _write_config(self) -> None:
         r"""Writing configs."""
 
-        dir_ = Path(self.gc.path.config, self.gc.filename_base)
-        dir_.mkdir(parents=True, exist_ok=True)
+        cfg_dir = Path(self.gc.path.config)
 
         collect_list = [
             ("train_used_images.txt", "train"),
@@ -132,10 +131,11 @@ class CreateDataset(Dataset):
             ("known_used_images.txt", "known"),
         ]
         for fname, target in collect_list:
-            path = dir_.joinpath(fname)
+            path = cfg_dir.joinpath(fname)
             with utils.LogFile(path, stdout=False) as f:
                 for x in self.all_list[target]:
-                    f.writeline(str(Path(x.path).resolve()))
+                    # f.writeline(str(Path(x.path).resolve()))
+                    f.writeline(x.path)
 
     def create_dataloader(
         self, batch_size: int = 64, transform: Any = None, is_shuffle: bool = True

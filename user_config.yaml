@@ -1,24 +1,20 @@
 path:
   # dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
-  dataset: 'D:\workspace\pro\__dataset\bird_by_yokoyama'
+  # dataset: 'D:\workspace\pro\__dataset\bird_by_yokoyama'
   # dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
   # dataset: "./dataset/Images/"
+  dataset: 'C:\ichiya\prcn2019\prcn2019-datasets\datasets\Images-20191014'
 
-  # mistaken: "./mistaken"
-  # model: "./dataset"
-  # config: "./config"
-  # log: "./logs"
-  # gradcam: "./GradCAM_results"
+  mistaken: "./mistaken"
+  model: "./models"
+  config: "./config"
+  log: "./logs"
+  gradcam: "./GradCAM_results"
 
 dataset:
-  limit_size: 100
-  valid_size: 0.1  # if `use_enum_txt` is true, `valid_size` is ignored.
+  limit_size: -1
+  valid_size: 0.1
   extensions: ["jpg", "png", "jpeg", "bmp"]
-
-  # use_enum_txt: false
-  # classes: ''
-  # train_txt: ''
-  # valid_txt: ''
 
   is_shuffle_per_epoch: true
 
@@ -37,16 +33,17 @@ network:
 
   epoch: 10
   batch: 64
-  subdivisions: 32
+  subdivisions: 64
 
   save_cycle: 0
   valid_cycle: 1
 
   gpu_enabled: true
-  is_save_final_model: true
-  # is_save_final_model: false
+  # is_save_final_model: true
+  is_save_final_model: false
 
-  class_name: "Net"  # ["Net", "VGG16"] in cnn.py
+  class_name: "LightNet"
+  # class_name: "Net"  # ["Net", "LightNet", "VGG16"] in cnn.py
 
 option:
   is_show_network_difinition: false
@@ -54,10 +51,6 @@ option:
 
   # is_debug: true
   is_save_log: false
-  # is_save_mistaken_pred: false
+  is_save_mistaken_pred: false
   is_save_config: false
-  log_tensorboard: true
-
-  # is_available_re_training: false
-  # re_training: false
-  # load_model_path: ""
+  log_tensorboard: false

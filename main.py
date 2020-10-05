@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
@@ -22,6 +23,10 @@ gc: GlobalConfig
 
 
 def run() -> None:
+    if not Path(gc.path.dataset).exists():
+        print(f"'{gc.path.dataset}' is not exist.")
+        exit(-1)
+
     print(f"Creating dataset from '{gc.path.dataset}'...")
     dataset = CreateDataset(gc=gc)  # train, unknown, known
     train_loader, unknown_loader, known_loader = get_dataloader(

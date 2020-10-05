@@ -145,14 +145,17 @@ def exec_gradcam(
     if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and ans == pred)]):
         return
 
-    gradcam_base_dir = Path(gc.path.gradcam, gc.filename_base)
+    gcam_base_dir = Path(gc.path.gradcam)
     epoch_str = f"epoch{epoch}"
-    mistaken_dir = gradcam_base_dir.joinpath(f"{phase}_mistaken", epoch_str)
-    mistaken_dir.mkdir(parents=True, exist_ok=True)
+
+    mistaken_dir = utils.concat_path_and_mkdir(
+        gcam_base_dir, concat=[f"{phase}_mistaken", epoch_str], is_make=True
+    )
     correct_dir = None
     if gc.gradcam.only_mistaken:
-        correct_dir = gradcam_base_dir.joinpath(f"{phase}_correct", epoch_str)
-        correct_dir.mkdir(parents=True, exist_ok=True)
+        correct_dir = utils.concat_path_and_mkdir(
+            gcam_base_dir, concat=[f"{phase}_correct", epoch_str], is_make=True
+        )
 
     ret = gcam.main(model.net, str(path))
     for phase, dat_list in ret.items():  # name: "gradcam", "vanilla" ...
@@ -167,7 +170,7 @@ def exec_gradcam(
 
 
 def save_model(model: Model, classes: List[str], gc: GlobalConfig, epoch: int):
-    path = utils.create_filepath(Path(gc.path.model, gc.filename_base), f"epoch{epoch}", ext="pt")
+    path = utils.create_filepath(Path(gc.path.model), f"epoch{epoch}", ext="pt")
     print(f"Saving model to '{path}'...")
 
     save_cfg = {"classes": classes, "model_state_dict": model.net.state_dict()}
