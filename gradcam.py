@@ -109,7 +109,7 @@ def get_data_of_gradcam(gcam: Tensor, raw_image: Tensor, paper_cmap: bool = Fals
 
 
 @dataclass
-class ExecuteGradCAM:
+class ExecuteOnlyGradCAM:
     def __init__(
         self,
         classes: List[str],
@@ -394,3 +394,138 @@ class ExecuteGradCAM:
             gbp.remove_hook()
 
         return processed_data
+
+
+@dataclass
+class ExecuteOnlyGradCAM:
+    classes: List[str]
+    input_size: Tuple[int, int]
+    target_layer: str
+    gpu_enabled: bool = True
+    is_gradcam: bool = True
+
+    def __post_init__(self) -> None:
+        self.device = None
+        self.class_num = len(self.classes)
+
+    def __get_init_dict(self) -> dict:
+        return {
+            "gbp": [],  # Guided Back Propagation
+            "gcam": [],  # Grad-CAM
+            "ggcam": [],  # Guided Grad-CAM
+        }
+
+    @torch.enable_grad()  # enable gradient
+    def main(self, model: T._net_t, image_path: T._path_t) -> dict:
+        """Switch execute function.
+
+        Args:
+            model (T._net_t): model.
+            image_path (Union[list, str]): path of image.
+
+        Returns:
+            List: processed image data.
+        """
+        model.eval()  # switch to eval
+
+        restore_device = None
+        if not self.gpu_enabled:
+            restore_device = next(model.parameters()).device
+            model.to(torch.device("cpu"))  # use only cpu
+
+        self.device = next(model.parameters()).device
+
+        # convert to list
+        # if isinstance(image_path, tuple):
+        #     image_path = list(image_path)
+
+        # process one image.
+        # if isinstance(image_path, str):
+        #     ret = self._execute_one_image(model, image_path)
+
+        # process multi images.
+        # elif isinstance(image_path, list):
+        #     ret = self._execute_multi_images(model, image_path)
+
+        ret = self._execute_one_image(model, str(image_path))
+
+        if not self.gpu_enabled:
+            model.to(restore_device)
+        return ret.copy()
+
+    def _execute_one_image(self, model: T._net_t, image_path: str) -> dict:
+        """Process one image.
+
+        Args:
+            model (T._net_t): model.
+            image_path (str): path of image.
+        """
+        processed_data = self.__get_init_dict()
+
+        # device = next(model.parameters()).device  # get device
+        if not self.gpu_enabled:
+            self.device = torch.device("cpu")  # cpu only
+
+        image, raw_image = preprocess(image_path, self.input_size)
+        image = image.unsqueeze_(0).to(self.device)
+        raw_image = torch.from_numpy(raw_image)
+        raw_image = raw_image.unsqueeze_(0).to(self.device)
+
+        # --- Vanilla Backpropagation ---
+        bp = BackPropagation(model=model)
+        _, ids = bp.forward(image)  # sorted
+
+        # --- Grad-CAM / Guided Backpropagation / Guided Grad-CAM ---
+        gcam = None
+        gbp = None
+
+        if self.is_gradcam:
+            gcam = GradCAM(model=model)
+            _ = gcam.forward(image)
+            del _
+
+            gbp = GuidedBackPropagation(model=model)
+            _ = gbp.forward(image)
+            del _
+
+        pbar = tqdm(
+            range(self.class_num),
+            total=self.class_num,
+            # ncols=100,
+            # bar_format="{l_bar}{bar:30}{r_bar}",
+            leave=False,
+        )
+        pbar.set_description("Grad-CAM")
+
+        for i in pbar:
+            # Grad-CAM / Guided Grad-CAM / Guided Backpropagation
+            gbp.backward(ids=ids[:, [i]])
+            gradients = gbp.generate().clone().cpu()
+
+            # Grad-CAM
+            gcam.backward(ids=ids[:, [i]])
+            regions = gcam.generate(target_layer=self.target_layer).clone().cpu()
+
+            # append
+            data = get_data_of_gradient(gradients[0]).clone().cpu()
+            processed_data["gbp"].append(data)
+
+            data = get_data_of_gradcam(regions[0, 0], raw_image[0]).clone().cpu()
+            processed_data["gcam"].append(data)
+
+            data = get_data_of_gradient(torch.mul(regions, gradients)[0]).clone().cpu()
+            processed_data["ggcam"].append(data)
+            del gradients, regions, data
+
+        # Remove all the hook function in the 'model'
+        bp.remove_hook()
+
+        # if self.is_deconv:
+        #     deconv.remove_hook()
+
+        if self.is_gradcam:
+            gcam.remove_hook()
+            gbp.remove_hook()
+
+        del ids, bp, gbp, gcam, image, raw_image
+        return processed_data.copy()
