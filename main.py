@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+from gcam import ExecuteGradCAM
 from pathlib import Path
 from typing import List, Tuple
 
@@ -14,7 +15,7 @@ from torch.utils.data.dataloader import DataLoader
 import impl
 import torch_utils as tutils
 import utils
-from gradcam import ExecuteGradCAM
+from gradcam import ExecuteOnlyGradCAM
 from my_typings import State, T
 from torch_utils import CreateDataset, get_dataloader
 from yaml_parser import GlobalConfig, parse
@@ -56,7 +57,9 @@ def run() -> None:
 
     # netword difinition
     impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
+    # exit()
 
+    # gcam = ExecuteOnlyGradCAM(
     gcam = ExecuteGradCAM(
         classes,
         gc.network.input_size,

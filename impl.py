@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from gcam import ExecuteGradCAM
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -69,7 +70,8 @@ def validation_step(
     model: Model,
     device: torch.device,
     gc: GlobalConfig,
-    gcam: ExecuteOnlyGradCAM,
+    # gcam: ExecuteOnlyGradCAM,
+    gcam: ExecuteGradCAM,
     name: str = "known",
     non_blocking: bool = False,
 ) -> T._batch_t:
@@ -134,7 +136,8 @@ def validate_model(
 def execute_gradcam(
     engine: Engine,
     gc: GlobalConfig,
-    gcam: ExecuteOnlyGradCAM,
+    # gcam: ExecuteOnlyGradCAM,
+    gcam: ExecuteGradCAM,
     model: Model,
     path: T._path_t,
     ans: int,
@@ -169,9 +172,6 @@ def execute_gradcam(
             # pil_img = Image.fromarray(cv2.cvtColor(img_dat, cv2.COLOR_BGR2RGB))  # type: ignore
             # pil_img.save(str(path_))
             print(path_)
-
-    # tutils.clear_grads(model.net)
-    # model.net.zero_grad()
     del ret
 
 

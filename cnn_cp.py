@@ -1,7 +1,5 @@
-from collections import OrderedDict
 from typing import Tuple
 import torch
-from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -57,80 +55,32 @@ class LightNet(nn.Module):
         height = input_size[0] // 4  # `4` depends on max_pool2d.
         width = input_size[1] // 4
 
-        # self.features = nn.Sequential(
-        #     nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3),
-        #     nn.ReLU(inplace=True),
-        #     nn.BatchNorm2d(48),
-        #     nn.Conv2d(48, 96, kernel_size=5, stride=1, padding=2),
-        #     nn.ReLU(inplace=True),
-        #     nn.BatchNorm2d(96),
-        #     nn.MaxPool2d(2),
-        #     nn.Conv2d(96, 128, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
-        #     nn.ReLU(inplace=True),
-        #     nn.MaxPool2d(2),
-        # )
-        self.features = nn.Sequential(nn.ModuleDict(OrderedDict([
-            ("conv1", nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3)),
-            ("relu1", nn.ReLU(inplace=True)),
-            ("bn1", nn.BatchNorm2d(48)),
-            ("conv2", nn.Conv2d(48, 96, kernel_size=5, stride=1, padding=2)),
-            ("relu2", nn.ReLU(inplace=True)),
-            ("bn2", nn.BatchNorm2d(96)),
-            ("pool1", nn.MaxPool2d(2)),
-            ("conv3", nn.Conv2d(96, 128, kernel_size=3, stride=1, padding=1)),
-            ("relu3", nn.ReLU(inplace=True)),
-            ("conv4", nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)),
-            ("relu4", nn.ReLU(inplace=True)),
-            ("conv5", nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)),
-            ("relu5", nn.ReLU(inplace=True)),
-            ("pool2", nn.MaxPool2d(2)),
-        ])))
+        self.conv1 = nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3)
+        self.bn1 = nn.BatchNorm2d(48)
+        self.conv2 = nn.Conv2d(48, 96, kernel_size=5, stride=1, padding=2)
+        self.bn2 = nn.BatchNorm2d(96)
+        self.conv3 = nn.Conv2d(96, 128, kernel_size=3, stride=1, padding=1)
+        self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
+        self.conv5 = nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
+        self.fc6 = nn.Linear((128 * height * width), 2048)
+        self.fc7 = nn.Linear(2048, 512)
+        self.fc8 = nn.Linear(512, classify_size)
 
-        # self.classifier = nn.Sequential(
-        #     nn.Linear((128 * height * width), 2048),
-        #     nn.Linear(2048, 512),
-        #     nn.Linear(512, classify_size),
-        # )
-        self.classifier = nn.Sequential(nn.ModuleDict(OrderedDict([
-            ("fc1", nn.Linear((128 * height * width), 2048)),
-            ("relu1", nn.ReLU(inplace=True)),
-            ("fc2", nn.Linear(2048, 512)),
-            ("relu2", nn.ReLU(inplace=True)),
-            ("fc3", nn.Linear(512, classify_size)),
-        ])))
-
-        # self.conv1 = nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3)
-        # self.bn1 = nn.BatchNorm2d(48)
-        # self.conv2 = nn.Conv2d(48, 96, kernel_size=5, stride=1, padding=2)
-        # self.bn2 = nn.BatchNorm2d(96)
-        # self.conv3 = nn.Conv2d(96, 128, kernel_size=3, stride=1, padding=1)
-        # self.conv4 = nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)
-        # self.conv5 = nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)
-        # self.fc6 = nn.Linear((128 * height * width), 2048)
-        # self.fc7 = nn.Linear(2048, 512)
-        # self.fc8 = nn.Linear(512, classify_size)
-
-    def forward(self, x: Tensor) -> torch.Tensor:
-        # x = F.relu(self.conv1(x))
-        # x = self.bn1(x)
-        # x = F.relu(self.conv2(x))
-        # x = self.bn2(x)
-        # x = F.max_pool2d(x, 2)
-        # x = F.relu(self.conv3(x))
-        # x = F.relu(self.conv4(x))
-        # x = F.relu(self.conv5(x))
-        # x = F.max_pool2d(x, 2)
-        x = self.features(x)
+    def forward(self, x) -> torch.Tensor:
+        x = F.relu(self.conv1(x))
+        x = self.bn1(x)
+        x = F.relu(self.conv2(x))
+        x = self.bn2(x)
+        x = F.max_pool2d(x, 2)
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
+        x = F.relu(self.conv5(x))
+        x = F.max_pool2d(x, 2)
 
         x = x.view(-1, num_flat_features(x))  # resize tensor
-        # x = F.relu(self.fc6(x))
-        # x = F.relu(self.fc7(x))
-        # x = self.fc8(x)
-        x = self.classifier(x)
+        x = F.relu(self.fc6(x))
+        x = F.relu(self.fc7(x))
+        x = self.fc8(x)
 
         # don't run `softmax()` because of softmax process in CrossEntropyLoss
         # x = F.softmax(x)
