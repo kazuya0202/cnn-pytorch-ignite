@@ -12,7 +12,7 @@ from torch.utils.data.dataloader import DataLoader
 
 import torch_utils as tutils
 import utils
-from gradcam import ExecuteGradCAM
+from gradcam import ExecuteOnlyGradCAM
 from my_typings import T
 from utils import prepare_batch
 from yaml_parser import GlobalConfig
@@ -69,7 +69,7 @@ def validation_step(
     model: Model,
     device: torch.device,
     gc: GlobalConfig,
-    gcam: ExecuteGradCAM,
+    gcam: ExecuteOnlyGradCAM,
     name: str = "known",
     non_blocking: bool = False,
 ) -> T._batch_t:
@@ -134,7 +134,7 @@ def validate_model(
 def execute_gradcam(
     engine: Engine,
     gc: GlobalConfig,
-    gcam: ExecuteGradCAM,
+    gcam: ExecuteOnlyGradCAM,
     model: Model,
     path: T._path_t,
     ans: int,
@@ -169,6 +169,9 @@ def execute_gradcam(
             # pil_img = Image.fromarray(cv2.cvtColor(img_dat, cv2.COLOR_BGR2RGB))  # type: ignore
             # pil_img.save(str(path_))
             print(path_)
+
+    # tutils.clear_grads(model.net)
+    # model.net.zero_grad()
     del ret
 
 

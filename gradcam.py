@@ -74,13 +74,13 @@ def get_data_of_gradient(gradient: Tensor) -> Tensor:
     Returns:
         Tensor: calculated gradient data.
     """
-    gradient = gradient.cpu().numpy().transpose(1, 2, 0)
-    gradient -= gradient.min()
-    gradient /= gradient.max()
-    gradient *= 255.0
-
-    np_gradient = np.uint8(gradient)  # type: ignore
+    np_gradient = gradient.cpu().numpy().transpose(1, 2, 0)
     del gradient
+    np_gradient -= np.min(np_gradient)
+    np_gradient /= np.max(np_gradient)
+    np_gradient *= 255.0
+
+    np_gradient = np.uint8(np_gradient)  # type: ignore
     return np_gradient
 
 
@@ -95,21 +95,22 @@ def get_data_of_gradcam(gcam: Tensor, raw_image: Tensor, paper_cmap: bool = Fals
     Returns:
         Tensor: [description]
     """
-    gcam = gcam.cpu().numpy()
-    cmap = cm.jet_r(gcam)[..., :3] * 255.0  # type: ignore
-    if paper_cmap:
-        alpha = gcam[..., None]
-        gcam = alpha * cmap + (torch.tensor(1) - alpha) * raw_image
-    else:
-        gcam = (cmap.astype(np.float) + raw_image.clone().cpu().numpy().astype(np.float)) / 2
-
-    np_gcam = np.uint8(gcam)  # type: ignore
+    np_gcam = gcam.cpu().numpy()
     del gcam
+    cmap = cm.jet_r(np_gcam)[..., :3] * 255.0  # type: ignore
+    if paper_cmap:
+        alpha = np_gcam[..., None]
+        np_gcam = alpha * cmap + ([1] - alpha) * raw_image
+        # np_gcam = alpha * cmap + ([torch.tensor(1)] - alpha) * raw_image
+    else:
+        np_gcam = (cmap.astype(np.float) + raw_image.clone().cpu().numpy().astype(np.float)) / 2
+
+    np_gcam = np.uint8(np_gcam)  # type: ignore
     return np_gcam
 
 
 @dataclass
-class ExecuteOnlyGradCAM:
+class ExecuteGradCAM:
     def __init__(
         self,
         classes: List[str],
@@ -426,7 +427,11 @@ class ExecuteOnlyGradCAM:
         Returns:
             List: processed image data.
         """
+        if not self.is_gradcam:
+            return {}
+
         model.eval()  # switch to eval
+        model.zero_grad()
 
         restore_device = None
         if not self.gpu_enabled:
@@ -434,18 +439,6 @@ class ExecuteOnlyGradCAM:
             model.to(torch.device("cpu"))  # use only cpu
 
         self.device = next(model.parameters()).device
-
-        # convert to list
-        # if isinstance(image_path, tuple):
-        #     image_path = list(image_path)
-
-        # process one image.
-        # if isinstance(image_path, str):
-        #     ret = self._execute_one_image(model, image_path)
-
-        # process multi images.
-        # elif isinstance(image_path, list):
-        #     ret = self._execute_multi_images(model, image_path)
 
         ret = self._execute_one_image(model, str(image_path))
 
@@ -476,17 +469,11 @@ class ExecuteOnlyGradCAM:
         _, ids = bp.forward(image)  # sorted
 
         # --- Grad-CAM / Guided Backpropagation / Guided Grad-CAM ---
-        gcam = None
-        gbp = None
+        gcam = GradCAM(model=model)
+        gcam.forward(image)
 
-        if self.is_gradcam:
-            gcam = GradCAM(model=model)
-            _ = gcam.forward(image)
-            del _
-
-            gbp = GuidedBackPropagation(model=model)
-            _ = gbp.forward(image)
-            del _
+        gbp = GuidedBackPropagation(model=model)
+        gbp.forward(image)
 
         pbar = tqdm(
             range(self.class_num),
@@ -500,32 +487,31 @@ class ExecuteOnlyGradCAM:
         for i in pbar:
             # Grad-CAM / Guided Grad-CAM / Guided Backpropagation
             gbp.backward(ids=ids[:, [i]])
-            gradients = gbp.generate().clone().cpu()
+            gradients = gbp.generate().clone().cpu().numpy()
 
             # Grad-CAM
             gcam.backward(ids=ids[:, [i]])
-            regions = gcam.generate(target_layer=self.target_layer).clone().cpu()
+            regions = gcam.generate(target_layer=self.target_layer).clone().cpu().numpy()
 
             # append
-            data = get_data_of_gradient(gradients[0]).clone().cpu()
+            data = get_data_of_gradient(gradients[0]).clone().cpu().numpy()
             processed_data["gbp"].append(data)
 
-            data = get_data_of_gradcam(regions[0, 0], raw_image[0]).clone().cpu()
+            data = get_data_of_gradcam(regions[0, 0], raw_image[0]).clone().cpu().numpy()
             processed_data["gcam"].append(data)
 
-            data = get_data_of_gradient(torch.mul(regions, gradients)[0]).clone().cpu()
+            data = get_data_of_gradient(torch.mul(regions, gradients)[0]).clone().cpu().numpy()
             processed_data["ggcam"].append(data)
             del gradients, regions, data
 
         # Remove all the hook function in the 'model'
         bp.remove_hook()
+        gcam.remove_hook()
+        gbp.remove_hook()
 
-        # if self.is_deconv:
-        #     deconv.remove_hook()
-
-        if self.is_gradcam:
-            gcam.remove_hook()
-            gbp.remove_hook()
-
+        # TODO
+        model.zero_grad()
+        for x in model.modules():
+            x.zero_grad()
         del ids, bp, gbp, gcam, image, raw_image
         return processed_data.copy()

@@ -1,9 +1,9 @@
 path:
-  dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
+  # dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
   # dataset: 'D:\workspace\pro\__dataset\bird_by_yokoyama'
   # dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
   # dataset: "./dataset/Images/"
-  # dataset: 'C:\ichiya\prcn2019\prcn2019-datasets\datasets\Images-20191014'
+  dataset: 'C:\ichiya\prcn2019\prcn2019-datasets\datasets\Images-20191014'
 
   mistaken: "./mistaken"
   model: "./models"
@@ -24,8 +24,8 @@ gradcam:
   only_mistaken: false
   layer: "conv5"
 
-  gpu_enabled: false
-  # gpu_enabled: true
+  # gpu_enabled: false
+  gpu_enabled: true
 
 network:
   height: 64

@@ -13,6 +13,7 @@ from torchvision.transforms.transforms import Resize
 import utils
 from my_typings import T
 from yaml_parser import GlobalConfig
+import impl
 
 
 @dataclass
@@ -218,3 +219,8 @@ def get_dataloader(dataset: CreateDataset, input_size: tuple, mini_batch: int, i
     loader = dataset.create_dataloader(mini_batch, transform, is_shuffle)
 
     return loader["train"], loader["unknown"], loader["known"]
+
+
+def clear_grads(net: T._net_t):
+    for param in net.features.parameters():  # type: ignore
+        param.requires_grad = False
