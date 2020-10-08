@@ -1,15 +1,15 @@
 from dataclasses import dataclass
 from gcam import ExecuteGradCAM
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-import cv2
 import ignite.contrib.handlers.tensorboard_logger as tbl
 import torch
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from PIL import Image
 from torch.utils.data.dataloader import DataLoader
+import numpy as np
 
 import torch_utils as tutils
 import utils
@@ -163,15 +163,19 @@ def execute_gradcam(
         )
 
     ret = gcam.main(model.net, str(path))
-    for phase, dat_list in ret.items():  # phase: "gradcam", "vanilla" ...
+    for phase, dat_list in ret.items():  # phase: "gcam", "gbp" ...
         for i, img_dat in enumerate(dat_list):
-            s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].jpg"
+            is_png = phase == "gbp"
+            ext = "png" if is_png else "jpg"
+
+            s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].{ext}"
             path_ = correct_dir.joinpath(s) if ans == pred else mistaken_dir.joinpath(s)
 
-            # save
-            # pil_img = Image.fromarray(cv2.cvtColor(img_dat, cv2.COLOR_BGR2RGB))  # type: ignore
-            # pil_img.save(str(path_))
-            print(path_)
+            if isinstance(img_dat, np.ndarray):
+                img = Image.fromarray(img_dat)
+            img = img_dat.convert("RGBA" if is_png else "RGB")
+            img.save(str(path_))
+            # print(path_)
     del ret
 
 

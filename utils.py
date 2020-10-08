@@ -11,6 +11,7 @@ from ignite.contrib.handlers import ProgressBar
 from ignite.contrib.handlers.tensorboard_logger import TensorboardLogger
 from ignite.engine.engine import Engine
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from torch import Tensor
 from tqdm import tqdm
 
 from my_typings import T
@@ -253,3 +254,11 @@ def plot_confusion_matrix(
     plt.tight_layout()
     fig = plt.gcf()
     return fig
+
+
+def num_flat_features(x: Tensor) -> int:
+    size = x.size()[1:]  # all dimensions except the batch dimension
+    num_features = 1
+    for s in size:
+        num_features *= s
+    return num_features

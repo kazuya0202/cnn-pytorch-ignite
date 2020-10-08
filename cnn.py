@@ -73,7 +73,7 @@ class LightNet(nn.Module):
         #     nn.ReLU(inplace=True),
         #     nn.MaxPool2d(2),
         # )
-        self.features = nn.Sequential(nn.ModuleDict(OrderedDict([
+        self.features = nn.Sequential(OrderedDict([
             ("conv1", nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3)),
             ("relu1", nn.ReLU(inplace=True)),
             ("bn1", nn.BatchNorm2d(48)),
@@ -88,20 +88,20 @@ class LightNet(nn.Module):
             ("conv5", nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)),
             ("relu5", nn.ReLU(inplace=True)),
             ("pool2", nn.MaxPool2d(2)),
-        ])))
+        ]))
 
         # self.classifier = nn.Sequential(
         #     nn.Linear((128 * height * width), 2048),
         #     nn.Linear(2048, 512),
         #     nn.Linear(512, classify_size),
         # )
-        self.classifier = nn.Sequential(nn.ModuleDict(OrderedDict([
+        self.classifier = nn.Sequential(OrderedDict([
             ("fc1", nn.Linear((128 * height * width), 2048)),
             ("relu1", nn.ReLU(inplace=True)),
             ("fc2", nn.Linear(2048, 512)),
             ("relu2", nn.ReLU(inplace=True)),
             ("fc3", nn.Linear(512, classify_size)),
-        ])))
+        ]))
 
         # self.conv1 = nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3)
         # self.bn1 = nn.BatchNorm2d(48)
@@ -115,22 +115,13 @@ class LightNet(nn.Module):
         # self.fc8 = nn.Linear(512, classify_size)
 
     def forward(self, x: Tensor) -> torch.Tensor:
-        # x = F.relu(self.conv1(x))
-        # x = self.bn1(x)
-        # x = F.relu(self.conv2(x))
-        # x = self.bn2(x)
-        # x = F.max_pool2d(x, 2)
-        # x = F.relu(self.conv3(x))
-        # x = F.relu(self.conv4(x))
-        # x = F.relu(self.conv5(x))
-        # x = F.max_pool2d(x, 2)
+        # print(x.size())
         x = self.features(x)
-
+        # print(x.size())
         x = x.view(-1, num_flat_features(x))  # resize tensor
-        # x = F.relu(self.fc6(x))
-        # x = F.relu(self.fc7(x))
-        # x = self.fc8(x)
+        # print(x.size())
         x = self.classifier(x)
+        # print(x.size())
 
         # don't run `softmax()` because of softmax process in CrossEntropyLoss
         # x = F.softmax(x)
@@ -202,7 +193,7 @@ class VGG16(nn.Module):
         return x
 
 
-def num_flat_features(x) -> int:
+def num_flat_features(x: Tensor) -> int:
     size = x.size()[1:]  # all dimensions except the batch dimension
     num_features = 1
     for s in size:

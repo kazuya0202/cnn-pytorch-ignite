@@ -10,6 +10,7 @@ import copy
 from torchvision import transforms
 
 from my_typings import T
+import utils
 
 
 @dataclass
@@ -25,10 +26,13 @@ class Extractor:
         conv_output = None
         layer: str
         for layer, module in self.model.features._modules.items():  # type: ignore
+            # print(module)
+            print(x.size())
             x = module(x)
             if layer == self.target_layer:
                 x.register_hook(self.save_grad)
                 conv_output = x
+        # exit()
         return conv_output, x
 
     def forward_pass(self, x: Tensor):
@@ -42,6 +46,7 @@ class Extractor:
 class GradCAM:
     model: T._net_t
     target_layer: str
+    input_size: Tuple[int, int] = (60, 60)
 
     extractor: Extractor = field(init=False)
 
@@ -52,18 +57,18 @@ class GradCAM:
 
     def generate_cam(self, image: Tensor, device: torch.device, target_cls: int = None):
         conv_output, model_output = self.extractor.forward_pass(image)
-        one_hot = torch.tensor(1, model_output.size()[-1]).zero_().to(device)
-
         if target_cls is None:
-            target_cls = np.argmax(model_output.cpu().numpy())
+            target_cls = np.argmax(model_output.detach().cpu().numpy())
+
+        one_hot = torch.zeros(size=(1, model_output.size()[-1])).to(device)
         one_hot[0][target_cls] = 1
 
         self.model.features.zero_grad()  # type: ignore
         self.model.classifier.zero_grad()  # type: ignore
 
-        model_output.backward(gradient=one_hot, keep_graph=True)
-        guided_gradients = self.extractor.gradients.cpu().numpy()[0]
-        target = conv_output.cpu().numpy()[0]
+        model_output.backward(gradient=one_hot, retain_graph=True)  # type: ignore
+        guided_gradients = self.extractor.gradients.detach().cpu().numpy()[0]
+        target = conv_output.detach().cpu().numpy()[0]
         weights = np.mean(guided_gradients, axis=(1, 2))
 
         cam = np.ones(target.shape[1:], dtype=np.float)
@@ -71,10 +76,10 @@ class GradCAM:
         for i, w in enumerate(weights):
             cam += w * target[i, :, :]
 
-        cam = np.max(cam, 0)
+        cam = np.maximum(cam, 0)  # type: ignore
         cam = (cam - np.min(cam)) / (np.max(cam) - np.min(cam))
         cam = np.uint8(cam * 255)  # type: ignore
-        img_ = Image.fromarray(cam).resize((image.shape[2], image.shape[3]), Image.ANTIALIAS)
+        img_ = Image.fromarray(cam).resize(self.input_size, Image.ANTIALIAS)
         cam = np.uint8(img_) / 255  # type: ignore
 
         return cam
@@ -87,7 +92,10 @@ class GradCAM:
         heatmap = copy.copy(no_trans_heatmap)
         heatmap[:, :, 3] = 0.4
         heatmap = Image.fromarray((heatmap * 255).astype(np.uint8))  # type: ignore
-        no_trans_heatmap = Image.fromarray((heatmap * 255).astype(np.uint8))  # type: ignore
+        no_trans_heatmap = Image.fromarray((no_trans_heatmap * 255).astype(np.uint8))  # type: ignore
+
+        # convert to Image
+        original_img = Image.fromarray(original_img)
 
         heatmap_on_image = Image.new("RGBA", original_img.size)
         heatmap_on_image = Image.alpha_composite(heatmap_on_image, original_img.convert("RGBA"))
@@ -95,9 +103,12 @@ class GradCAM:
         return no_trans_heatmap, heatmap_on_image
 
 
-def preprocess(path: T._path_t, input_size: Tuple[int, int] = (60, 60)) -> Tuple[Tensor, Image.Image]:
+def preprocess(
+    path: T._path_t, input_size: Tuple[int, int] = (60, 60)
+# ) -> Tuple[Tensor, Image.Image]:
+) -> Tuple[Tensor, np.ndarray]:
     raw_image = Image.open(str(path))
-    raw_image.resize(input_size)
+    raw_image = raw_image.resize(input_size)
 
     image = transforms.Compose(
         [
@@ -105,7 +116,8 @@ def preprocess(path: T._path_t, input_size: Tuple[int, int] = (60, 60)) -> Tuple
             # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
         ]
-    )(raw_image.copy())
+    )(raw_image)
+    raw_image = np.array(raw_image)
 
     return image, raw_image  # type: ignore
 
@@ -133,12 +145,12 @@ class ExecuteGradCAM:
 
         self.device = next(model.parameters()).device
 
-        # クラス分全部かけるならfor まわして gen_cam(..., None)のNoneをclasses[i]にする
-        gcam = GradCAM(model, self.target_layer)
+        gcam = GradCAM(model, self.target_layer, self.input_size)
         processed_data = self.__get_init_dict()
 
         image, raw_image = preprocess(img_path, self.input_size)
         image = image.unsqueeze_(0).to(self.device)
+        # raw_image = torch.from_numpy(RawIOBase).unsqueeze_(0).to(self.device)
 
         cam = gcam.generate_cam(image, self.device, target_cls=None)
         heatmap, heatmap_on_image = gcam.apply_cmap_on_image(raw_image, cam, "rainbow")
