@@ -1,0 +1,9 @@
+model: ""
+gpu_enabled: true
+
+imgs: [""]
+
+height: 60
+width: 60
+chennels: 3
+class_name: "LightNet"

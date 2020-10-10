@@ -14,7 +14,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor
 from tqdm import tqdm
 
-from my_typings import T
+from . import T
 
 
 @dataclass
@@ -160,8 +160,8 @@ def create_filepath(
     return str(path)
 
 
-def concat_path_and_mkdir(
-    base_path: T._path_t, concat: Union[T._path_t, List[T._path_t]], is_make: bool = False
+def concat_path(
+    base_path: T._path_t, concat: Union[T._path_t, List[T._path_t]], *, is_make: bool = False
 ) -> Path:
     fp = Path(base_path, *concat) if isinstance(concat, list) else Path(base_path, concat)
     if is_make:

@@ -1,7 +1,7 @@
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from PIL import Image
 from sklearn.model_selection import train_test_split
@@ -10,10 +10,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Compose, Normalize, ToTensor
 from torchvision.transforms.transforms import Resize
 
-import utils
-from my_typings import T
-from yaml_parser import GlobalConfig
-import impl
+from . import T, utils
+from .global_config import GlobalConfig
 
 
 @dataclass
@@ -86,14 +84,6 @@ class CreateDataset(Dataset):
 
         # all extensions / all sub directories
         for label_idx, dir_ in enumerate(dirs):
-            # xs = []
-            # for ext in self.gc.dataset.extensions:
-            #     tmp = [
-            #         Data(x.as_posix(), label_idx, dir_.name)
-            #         for x in dir_.glob(f"*.{ext}")
-            #         if x.is_file()
-            #     ]
-            #     xs.extend(tmp)
             xs = [
                 Data(x.as_posix(), label_idx, dir_.name)
                 for ext in self.gc.dataset.extensions
@@ -138,31 +128,24 @@ class CreateDataset(Dataset):
                     # f.writeline(str(Path(x.path).resolve()))
                     f.writeline(x.path)
 
-    def create_dataloader(
-        self, batch_size: int = 64, transform: Any = None, is_shuffle: bool = True
-    ) -> Dict[str, DataLoader]:
-        r"""Create DataLoader instance of `train`, `unknown`, `known` dataset.
+    def get_dataloader(
+        self, input_size: tuple, mini_batch: int, is_shuffle: bool, transform: Any = None
+    ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+        if transform is None:
+            transform = Compose(
+                [Resize(input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+            )
 
-        Args:
-            batch_size (int, optional): batch size. Defaults to 64.
-            transform (Any, optional): transform. Defaults to None.
-            is_shuffle (bool, optional): shuffle. Defaults to True.
+        def create_dataloader(key: str, batch_size: int):
+            dataset_ = CustomDataset(self.all_list[key], transform)
+            return DataLoader(dataset_, batch_size, shuffle=is_shuffle)
 
-        Returns:
-            Dict[str, DataLoader]: DataLoader.
-        """
+        # create dataloader
+        train_loader = create_dataloader("train", batch_size=mini_batch)
+        unknown_loader = create_dataloader("unknown", batch_size=1)
+        known_loader = create_dataloader("known", batch_size=1)
 
-        # create dataset
-        train_ = CustomDataset(self.all_list["train"], transform)
-        unknown_ = CustomDataset(self.all_list["unknown"], transform)
-        known_ = CustomDataset(self.all_list["known"], transform)
-
-        train_data = DataLoader(train_, batch_size=batch_size, shuffle=is_shuffle)
-        unknown_data = DataLoader(unknown_, batch_size=1, shuffle=is_shuffle)
-        known_data = DataLoader(known_, batch_size=1, shuffle=is_shuffle)
-
-        # return train_data, unknown_data, known_data
-        return {"train": train_data, "unknown": unknown_data, "known": known_data}
+        return train_loader, unknown_loader, known_loader
 
 
 @dataclass
@@ -193,13 +176,11 @@ class CustomDataset(Dataset):
         x = self.target_list[idx]
         path, label, _ = x.items()
 
-        img = Image.open(path)
-        img = img.convert("RGB")
+        img = Image.open(path).convert("RGB")
 
-        if self.transform is not None:
+        if self.transform:
             img = self.transform(img)
         return img, label, path
-        # return MiniBatch((img, label), path)
 
     def __len__(self):
         r"""Returns length.
@@ -208,17 +189,6 @@ class CustomDataset(Dataset):
             int: length.
         """
         return self.list_size
-
-
-def get_dataloader(dataset: CreateDataset, input_size: tuple, mini_batch: int, is_shuffle: bool):
-    transform = Compose(
-        [Resize(input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-    )
-
-    # loader = {'train': [...], 'unknown': [...], 'known': [...]}
-    loader = dataset.create_dataloader(mini_batch, transform, is_shuffle)
-
-    return loader["train"], loader["unknown"], loader["known"]
 
 
 def clear_grads(net: T._net_t):

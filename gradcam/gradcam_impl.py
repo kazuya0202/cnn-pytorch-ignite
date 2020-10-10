@@ -2,10 +2,9 @@ from typing import Dict, Tuple, Union
 
 import torch
 import torch.nn as nn
+from modules import T
 from torch import Tensor
 from torch.nn import functional as F
-
-from my_typings import T
 
 
 class _BaseWrapper(object):

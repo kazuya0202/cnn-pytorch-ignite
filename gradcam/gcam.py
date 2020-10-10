@@ -1,16 +1,14 @@
+import copy
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib.cm as mpl_cm
 import numpy as np
 import torch
+from modules import T
 from PIL import Image
-import matplotlib.cm as mpl_cm
 from torch import Tensor
-import copy
 from torchvision import transforms
-
-from my_typings import T
-import utils
 
 
 @dataclass
@@ -25,14 +23,12 @@ class Extractor:
     def forward_pass_on_conv(self, x: Tensor):
         conv_output = None
         layer: str
+        module: torch.nn.Module
         for layer, module in self.model.features._modules.items():  # type: ignore
-            # print(module)
-            print(x.size())
             x = module(x)
             if layer == self.target_layer:
                 x.register_hook(self.save_grad)
                 conv_output = x
-        # exit()
         return conv_output, x
 
     def forward_pass(self, x: Tensor):
@@ -53,7 +49,6 @@ class GradCAM:
     def __post_init__(self) -> None:
         self.model.eval()
         self.extractor = Extractor(self.model, self.target_layer)
-        self.device = next(self.model.parameters()).device
 
     def generate_cam(self, image: Tensor, device: torch.device, target_cls: int = None):
         conv_output, model_output = self.extractor.forward_pass(image)
@@ -105,7 +100,6 @@ class GradCAM:
 
 def preprocess(
     path: T._path_t, input_size: Tuple[int, int] = (60, 60)
-# ) -> Tuple[Tensor, Image.Image]:
 ) -> Tuple[Tensor, np.ndarray]:
     raw_image = Image.open(str(path))
     raw_image = raw_image.resize(input_size)
@@ -127,24 +121,11 @@ class ExecuteGradCAM:
     classes: List[str]
     input_size: Tuple[int, int]
     target_layer: str
-    gpu_enabled: bool = True
+    device: torch.device
     is_gradcam: bool = True
-
-    gradcam: GradCAM = field(init=False)
-    device: torch.device = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.class_num = len(self.classes)
 
     @torch.enable_grad()
     def main(self, model: T._net_t, img_path: T._path_t) -> Dict[str, List[Image.Image]]:
-        restore_device = None
-        if not self.gpu_enabled:
-            restore_device = next(model.parameters()).device
-            model.to(torch.device("cpu"))  # use only cpu
-
-        self.device = next(model.parameters()).device
-
         gcam = GradCAM(model, self.target_layer, self.input_size)
         processed_data = self.__get_init_dict()
 
@@ -158,10 +139,6 @@ class ExecuteGradCAM:
         processed_data["ggcam"].append(heatmap)
         processed_data["gcam"].append(heatmap_on_image)
         processed_data["gbp"].append(cam)
-
-        if not self.gpu_enabled:
-            model.to(restore_device)
-
         return processed_data
 
     def __get_init_dict(self) -> Dict[str, list]:

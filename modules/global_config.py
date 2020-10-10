@@ -3,12 +3,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 
-import torch
-import yaml
-
 import cnn
-import utils
-from my_typings import T
+import torch
+
+from . import T, utils
 
 
 @dataclass
@@ -43,8 +41,6 @@ class Gradcam_:
     only_mistaken: bool = True
     layer: str = "conv5"
 
-    gpu_enabled: bool = True
-
 
 @dataclass
 class Network_:
@@ -74,10 +70,6 @@ class Network_:
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
 
         self.class_ = eval(f"cnn.{self.class_name}")
-        # if self.class_name == "VGG16":
-        #     self.class_ = cnn.VGG16
-        # elif self.class_name == "LightNet":
-        #     self.class_ = cnn.LightNet
 
 
 @dataclass
@@ -85,10 +77,9 @@ class Option_:
     is_show_network_difinition: bool = True
     verbose: bool = True
 
-    # is_debug: bool = False
-    is_save_log: bool = True
+    is_save_log: bool = False
     is_save_mistaken_pred: bool = False
-    is_save_config: bool = True
+    is_save_config: bool = False
     log_tensorboard: bool = False
 
 
@@ -109,45 +100,33 @@ class GlobalConfig:
         if not self.__data:  # empty dict
             return
 
-        path_ = self.__data.pop("path")
-        dataset_ = self.__data.pop("dataset")
-        gradcam_ = self.__data.pop("gradcam")
-        network_ = self.__data.pop("network")
-        option_ = self.__data.pop("option")
-
-        def create_instance(cls_obj: Any, dict_: dict) -> Any:
+        def create_instance(cls_obj: Any, key: str) -> Any:
+            dict_ = self.__data.pop(key)
             return cls_obj(**dict_) if dict_ is not None else cls_obj()
 
-        self.path = create_instance(Path_, path_)
-        self.dataset = create_instance(Dataset_, dataset_)
-        self.gradcam = create_instance(Gradcam_, gradcam_)
-        self.network = create_instance(Network_, network_)
-        self.option = create_instance(Option_, option_)
+        self.path = create_instance(Path_, "path")
+        self.dataset = create_instance(Dataset_, "dataset")
+        self.gradcam = create_instance(Gradcam_, "gradcam")
+        self.network = create_instance(Network_, "network")
+        self.option = create_instance(Option_, "option")
 
         self.filename_base = datetime.now().strftime("%Y%b%d_%Hh%Mm%Ss")
         self.log = utils.LogFile(stdout=False)
 
         # determine directory structure / make directory
-        self.path.mistaken = utils.concat_path_and_mkdir(
+        self.path.mistaken = utils.concat_path(
             self.path.mistaken, self.filename_base, is_make=self.option.is_save_mistaken_pred
         )
-        self.path.model = utils.concat_path_and_mkdir(
+        self.path.model = utils.concat_path(
             self.path.model,
             self.filename_base,
             is_make=self.network.save_cycle != 0 or self.network.is_save_final_model,
         )
-        self.path.config = utils.concat_path_and_mkdir(
+        self.path.config = utils.concat_path(
             self.path.config, self.filename_base, is_make=self.option.is_save_config
         )
-        self.path.gradcam = utils.concat_path_and_mkdir(
+        self.path.gradcam = utils.concat_path(
             self.path.gradcam, self.filename_base, is_make=self.gradcam.enabled
         )
 
         Path(self.path.log).mkdir(parents=True, exist_ok=True)
-
-
-def parse(path: str) -> GlobalConfig:
-    path = path if path is not None else "user_config.yaml"
-    with open(path, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-        return GlobalConfig(data)

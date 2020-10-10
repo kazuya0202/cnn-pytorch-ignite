@@ -1,22 +1,21 @@
 from dataclasses import dataclass
-from gcam import ExecuteGradCAM
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
+import numpy as np
 import torch
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from PIL import Image
 from torch.utils.data.dataloader import DataLoader
-import numpy as np
+import tqdm
 
-import torch_utils as tutils
-import utils
-from gradcam import ExecuteOnlyGradCAM
-from my_typings import T
-from utils import prepare_batch
-from yaml_parser import GlobalConfig
+from gradcam import ExecuteGradCAM
+from modules import T
+from modules import torch_utils as tutils
+from modules import utils
+from modules.global_config import GlobalConfig
 
 
 @dataclass
@@ -33,16 +32,13 @@ class Predict:
 
 
 def train_step(
-    minibatch: tutils.MiniBatch,
-    model: Model,
-    device: torch.device,
-    subdivisions: int,
-    non_blocking: bool = False,
+    minibatch: tutils.MiniBatch, model: Model, subdivisions: int, non_blocking: bool = False,
 ):
     model.net.train()
     model.optimizer.zero_grad()
 
     pred_chunk = torch.tensor([], device=torch.device("cpu"))
+    device = model.device
 
     # total_loss = 0.0  # total loss of one batch
     for x, _ in utils.subdivide_batch(
@@ -68,21 +64,21 @@ def validation_step(
     engine: Engine,
     minibatch: tutils.MiniBatch,
     model: Model,
-    device: torch.device,
     gc: GlobalConfig,
-    # gcam: ExecuteOnlyGradCAM,
     gcam: ExecuteGradCAM,
-    name: str = "known",
+    phase: str = "known",
     non_blocking: bool = False,
 ) -> T._batch_t:
     model.net.eval()
+    device = model.device
+
     with torch.no_grad():
-        x, y = prepare_batch(minibatch.batch, device, non_blocking=non_blocking)
+        x, y = utils.prepare_batch(minibatch.batch, device, non_blocking=non_blocking)
         y_pred = model.net(x)
 
         ans = int(y[0].item())
         pred = int(torch.max(y_pred.data, 1)[1].item())
-        execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, name)
+        execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
 
         return y_pred, y
 
@@ -136,16 +132,16 @@ def validate_model(
 def execute_gradcam(
     engine: Engine,
     gc: GlobalConfig,
-    # gcam: ExecuteOnlyGradCAM,
     gcam: ExecuteGradCAM,
     model: Model,
     path: T._path_t,
     ans: int,
     pred: int,
-    phase: str,
+    name: str,
 ) -> None:
     # do not execute / execute only mistaken
-    if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and ans == pred)]):
+    is_correct = ans == pred
+    if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and is_correct)]):
         return
     epoch = engine.state.epoch
     iteration = engine.state.iteration
@@ -153,27 +149,25 @@ def execute_gradcam(
     gcam_base_dir = Path(gc.path.gradcam)
     epoch_str = f"epoch{epoch}"
 
-    mistaken_dir = utils.concat_path_and_mkdir(
-        gcam_base_dir, concat=[f"{phase}_mistaken", epoch_str], is_make=True
+    dir_name = "correct" if is_correct else "mistaken"
+    base_dir = utils.concat_path(
+        gcam_base_dir, concat=[f"{name}_{dir_name}", epoch_str], is_make=True
     )
-    correct_dir = None
-    if not gc.gradcam.only_mistaken:
-        correct_dir = utils.concat_path_and_mkdir(
-            gcam_base_dir, concat=[f"{phase}_correct", epoch_str], is_make=True
-        )
 
     ret = gcam.main(model.net, str(path))
-    for phase, dat_list in ret.items():  # phase: "gcam", "gbp" ...
-        for i, img_dat in enumerate(dat_list):
-            is_png = phase == "gbp"
+    pbar = tqdm.tqdm(ret.items(), desc="Grad-CAM", leave=False)
+
+    for name, data_list in pbar:  # name: "gcam", "gbp" ...
+        for i, img in enumerate(data_list):
+            is_png = name == "gbp"
             ext = "png" if is_png else "jpg"
 
-            s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].{ext}"
-            path_ = correct_dir.joinpath(s) if ans == pred else mistaken_dir.joinpath(s)
+            s = f"{iteration}_{gcam.classes[i]}_{name}_pred[{pred}]_correct[{ans}].{ext}"
+            path_ = base_dir.joinpath(s)
 
-            if isinstance(img_dat, np.ndarray):
-                img = Image.fromarray(img_dat)
-            img = img_dat.convert("RGBA" if is_png else "RGB")
+            if isinstance(img, np.ndarray):
+                img = Image.fromarray(img)
+            img = img.convert("RGBA" if is_png else "RGB")
             img.save(str(path_))
             # print(path_)
     del ret

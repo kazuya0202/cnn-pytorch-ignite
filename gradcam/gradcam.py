@@ -1,19 +1,17 @@
 from dataclasses import dataclass
-
-from PIL import Image
-from my_typings import T
 from typing import List, Tuple, Union
 
 import cv2
 import matplotlib.cm as cm
 import numpy as np
 import torch
+from modules.my_typings import T
+from PIL import Image
 from torch import Tensor
 from torchvision import transforms
 from tqdm import tqdm
 
-# my packages
-from gradcam_impl import BackPropagation, Deconvnet, GradCAM, GuidedBackPropagation
+from . import BackPropagation, Deconvnet, GradCAM, GuidedBackPropagation
 
 
 def preprocess(image_path: str, input_size: tuple) -> Tuple[Tensor, Tensor]:

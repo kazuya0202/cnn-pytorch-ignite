@@ -1,12 +1,12 @@
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Type, Union
-from torch import Tensor
-from torch import nn
 
-from torch import optim
 import cnn
+from torch import Tensor, nn, optim
 
 
+@dataclass(frozen=True)
 class T:
     _path_t = Union[Path, str]
 
@@ -19,6 +19,7 @@ class T:
     _criterion_t = Union[nn.CrossEntropyLoss]
 
 
+@dataclass(frozen=True)
 class State:
     TRAINING = "Training"
     UNKNOWN_VALID = "Unkonwn Validation"

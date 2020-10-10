@@ -1,52 +1,52 @@
 from argparse import ArgumentParser, Namespace
-from gcam import ExecuteGradCAM
 from pathlib import Path
 from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
+import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
 from ignite.metrics.running_average import RunningAverage
 from torch import nn, optim
 from torch.utils.data.dataloader import DataLoader
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
-# my packages
 import impl
-import torch_utils as tutils
-import utils
-from gradcam import ExecuteOnlyGradCAM
-from my_typings import State, T
-from torch_utils import CreateDataset, get_dataloader
-from yaml_parser import GlobalConfig, parse
+from gradcam import ExecuteGradCAM
+from modules import State, T
+from modules import torch_utils as tutils
+from modules import utils
+from modules.global_config import GlobalConfig
 
 gc: GlobalConfig
 
 
 def run() -> None:
     if not Path(gc.path.dataset).exists():
-        print(f"'{gc.path.dataset}' is not exist.")
-        exit(-1)
+        raise FileNotFoundError(f"'{gc.path.dataset}' is not exist.")
+
+    transform = Compose(
+        [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),]
+    )
 
     print(f"Creating dataset from '{gc.path.dataset}'...")
-    dataset = CreateDataset(gc=gc)  # train, unknown, known
-    train_loader, unknown_loader, known_loader = get_dataloader(
-        dataset,
+    dataset = tutils.CreateDataset(gc)  # train, unknown, known
+    train_loader, unknown_loader, known_loader = dataset.get_dataloader(
         input_size=gc.network.input_size,
         mini_batch=gc.network.batch,
         is_shuffle=gc.dataset.is_shuffle_per_epoch,
+        transform=transform,
     )
+    del dataset.all_list
 
-    print("Building network...")
+    print(f"Building network by '{gc.network.class_.__name__}'...")
     classes = list(dataset.classes.values())
     device = gc.network.device
 
     net = gc.network.class_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
     model = impl.Model(
-        net=net,
-        optimizer=optim.Adam(net.parameters()),
-        criterion=nn.CrossEntropyLoss(),
-        device=device,
+        net, optimizer=optim.Adam(net.parameters()), criterion=nn.CrossEntropyLoss(), device=device,
     )
     del net
 
@@ -57,32 +57,30 @@ def run() -> None:
 
     # netword difinition
     impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
-    # exit()
 
-    # gcam = ExecuteOnlyGradCAM(
     gcam = ExecuteGradCAM(
         classes,
-        gc.network.input_size,
-        gc.gradcam.layer,
-        gpu_enabled=(gc.network.gpu_enabled and gc.gradcam.gpu_enabled),
+        input_size=gc.network.input_size,
+        target_layer=gc.gradcam.layer,
+        device=gc.network.device,
         is_gradcam=gc.gradcam.enabled,
     )
 
     def train_step(engine: Engine, batch: T._batch_path_t):
         minibatch = tutils.MiniBatch(batch)
-        return impl.train_step(minibatch, model, device, subdivisions=gc.network.subdivisions)
+        return impl.train_step(
+            minibatch, model, subdivisions=gc.network.subdivisions, non_blocking=True
+        )
 
     def unknown_validation_step(engine: Engine, batch: T._batch_path_t):
         minibatch = tutils.MiniBatch(batch)
         return impl.validation_step(
-            engine, minibatch, model, device, gc, gcam, "unknown", non_blocking=False
+            engine, minibatch, model, gc, gcam, "unknown", non_blocking=True
         )
 
     def known_validation_step(engine: Engine, batch: T._batch_path_t):
         minibatch = tutils.MiniBatch(batch)
-        return impl.validation_step(
-            engine, minibatch, model, device, gc, gcam, "known", non_blocking=False
-        )
+        return impl.validation_step(engine, minibatch, model, gc, gcam, "known", non_blocking=True)
 
     # trainer / evaluator
     trainer = Engine(train_step)
@@ -108,19 +106,16 @@ def run() -> None:
         (known_evaluator, known_loader, State.KNOWN_VALID),
     ]
 
+    # tensorboard
     tb_logger = None
     if gc.option.log_tensorboard:
         tb_logger = tbl.TensorboardLogger()
-
-    # tensorboard
-    if tb_logger and False:  # debug
         impl.log_tensorboard(tb_logger, trainer, collect_list, model)
 
     # schedule
     valid_schedule = utils.create_schedule(gc.network.epoch, gc.network.valid_cycle)
     save_schedule = utils.create_schedule(gc.network.epoch, gc.network.save_cycle)
-    if not gc.network.is_save_final_model:
-        save_schedule[-1] = False
+    save_schedule[-1] = gc.network.is_save_final_model  # depends on config.
 
     def validate_model(engine: Engine, collect_list: List[Tuple[Engine, DataLoader, str]]):
         if valid_schedule[engine.state.epoch - 1]:
@@ -140,8 +135,11 @@ def run() -> None:
     # kick everything off
     trainer.run(train_loader, max_epochs=gc.network.epoch)
 
+    # close file
     if gc.option.log_tensorboard:
         tb_logger.close()
+    if gc.option.is_save_log:
+        gc.log.close()
 
 
 def parse_arg() -> Namespace:
@@ -151,9 +149,18 @@ def parse_arg() -> Namespace:
     return parser.parse_args()
 
 
+def parse_yaml(path: str) -> GlobalConfig:
+    if not Path(path).exists:
+        raise FileNotFoundError(f"'{path}' is not exist.")
+
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+        return GlobalConfig(data)
+
+
 if __name__ == "__main__":
     args = parse_arg()
     print(f"Loading config from '{args.cfg}'...")
-    gc = parse(path=args.cfg)
+    gc = parse_yaml(path=args.cfg)
 
     run()
