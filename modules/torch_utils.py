@@ -55,32 +55,32 @@ class CreateDataset(Dataset):
     """
     gc: GlobalConfig
 
+    all_list: Dict[str, List[Data]] = field(init=False)  # {'train': [], 'unknown': [], 'known': []}
+    classes: Dict[int, str] = field(init=False)  # {label: 'class name', ...}
+
+    # size of images
+    all_size: int = field(init=False)
+    train_size: int = field(init=False)
+    unknown_size: int = field(init=False)
+    known_size: int = field(init=False)
+
     def __post_init__(self):
-        self.all_list: Dict[str, List[Data]]  # {'train': [], 'unknown': [], 'known': []}
-        self.classes: Dict[int, str]  # {label: 'class name', ...}
-
-        # size of images
-        self.all_size: int
-        self.train_size: int
-        self.unknown_size: int
-        self.known_size: int
-
-        self._get_dataset()  # train / unknown / known
+        self.__initialize()
+        self.__get_dataset()  # train / unknown / known
 
         if self.gc.option.is_save_config:
             self._write_config()  # write config of model
 
-    def _get_dataset(self) -> None:
-        r"""Get all datas from each directory."""
-
-        # init
+    def __initialize(self) -> None:
         self.all_list = {"train": [], "unknown": [], "known": []}
         self.classes = {}
 
+    def __get_dataset(self) -> None:
+        r"""Get all datas from each directory."""
         path = Path(self.gc.path.dataset)
 
         # directories in [image_path]
-        dirs = [d for d in path.glob("*") if d.is_dir()]
+        dirs = [x for x in path.glob("*") if x.is_dir()]
 
         # all extensions / all sub directories
         for label_idx, dir_ in enumerate(dirs):
@@ -128,20 +128,22 @@ class CreateDataset(Dataset):
                     # f.writeline(str(Path(x.path).resolve()))
                     f.writeline(x.path)
 
-    def get_dataloader(
-        self, input_size: tuple, mini_batch: int, is_shuffle: bool, transform: Any = None
-    ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    def get_dataloader(self, transform: Any = None) -> Tuple[DataLoader, DataLoader, DataLoader]:
         if transform is None:
             transform = Compose(
-                [Resize(input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+                [
+                    Resize(self.gc.network.input_size),
+                    ToTensor(),
+                    Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                ]
             )
 
         def create_dataloader(key: str, batch_size: int):
             dataset_ = CustomDataset(self.all_list[key], transform)
-            return DataLoader(dataset_, batch_size, shuffle=is_shuffle)
+            return DataLoader(dataset_, batch_size, shuffle=self.gc.dataset.is_shuffle_per_epoch)
 
         # create dataloader
-        train_loader = create_dataloader("train", batch_size=mini_batch)
+        train_loader = create_dataloader("train", batch_size=self.gc.network.batch)
         unknown_loader = create_dataloader("unknown", batch_size=1)
         known_loader = create_dataloader("known", batch_size=1)
 

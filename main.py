@@ -27,23 +27,18 @@ def run() -> None:
         raise FileNotFoundError(f"'{gc.path.dataset}' is not exist.")
 
     transform = Compose(
-        [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),]
+        [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
 
     print(f"Creating dataset from '{gc.path.dataset}'...")
     dataset = tutils.CreateDataset(gc)  # train, unknown, known
-    train_loader, unknown_loader, known_loader = dataset.get_dataloader(
-        input_size=gc.network.input_size,
-        mini_batch=gc.network.batch,
-        is_shuffle=gc.dataset.is_shuffle_per_epoch,
-        transform=transform,
-    )
+    train_loader, unknown_loader, known_loader = dataset.get_dataloader(transform)
     del dataset.all_list
 
-    print(f"Building network by '{gc.network.class_.__name__}'...")
     classes = list(dataset.classes.values())
     device = gc.network.device
 
+    print(f"Building network by '{gc.network.class_.__name__}'...")
     net = gc.network.class_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
     model = impl.Model(
         net, optimizer=optim.Adam(net.parameters()), criterion=nn.CrossEntropyLoss(), device=device,

@@ -18,6 +18,12 @@ class Predict:
     label: int = -1
     name: str = "None"
     rate: float = 0.0
+    path: T._path_t = ""
+
+    is_pred: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.is_pred = self.label != -1
 
 
 @dataclass
@@ -33,7 +39,7 @@ class ValidModel:
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
         self.__load(self.tc.model)
 
-        if self.transform:
+        if self.transform is None:
             self.transform = transforms.Compose(
                 [
                     transforms.Resize(self.tc.input_size),
@@ -77,7 +83,7 @@ class ValidModel:
             pred = torch.max(x_sm.data, 1)
 
             label = int(pred[1].item())
-            return Predict(label, name=self.classes[label], rate=float(pred[0].item()))
+            return Predict(label, name=self.classes[label], rate=float(pred[0].item()), path=img_path)
 
     def preprocess(self, path: T._path_t) -> Tensor:
         img_pil = Image.open(path).convert("RGB")
@@ -129,4 +135,6 @@ if __name__ == "__main__":
     transform = None
     model = ValidModel(tc, transform)
 
-    model.run()
+    for x in model.run():
+        if x.is_pred:
+            print(f"{x.label} | {x.path}")
