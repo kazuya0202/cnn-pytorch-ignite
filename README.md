@@ -1,2 +1,2 @@
-# cnn-pytorch-ignire
+# cnn-pytorch-ignite
 
