@@ -66,14 +66,52 @@ class CreateDataset(Dataset):
 
     def __post_init__(self):
         self.__initialize()
-        self.__get_dataset()  # train / unknown / known
+
+        # collect images for dataset
+        if self.gc.dataset.is_pre_splited:
+            self.__get_dataset_from_dir()
+        else:
+            self.__get_dataset()
 
         if self.gc.option.is_save_config:
             self._write_config()  # write config of model
 
+        self.train_size = len(self.all_list["train"])
+        self.unknown_size = len(self.all_list["unknown"])
+        self.known_size = len(self.all_list["known"])
+
+        self.all_size = self.train_size + self.unknown_size
+
     def __initialize(self) -> None:
         self.all_list = {"train": [], "unknown": [], "known": []}
         self.classes = {}
+
+    def __get_dataset_from_dir(self) -> None:
+        utils.check_existence(self.gc.dataset.train_dir)
+        utils.check_existence(self.gc.dataset.valid_dir)
+
+        train_dirs = [x for x in Path(self.gc.dataset.train_dir).glob("*") if x.is_dir()]
+        valid_dirs = [x for x in Path(self.gc.dataset.valid_dir).glob("*") if x.is_dir()]
+
+        def glob_img(dir_: Path) -> List[Data]:
+            return [
+                Data(x.as_posix(), label_idx, dir_.name)
+                for ext in self.gc.dataset.extensions
+                for x in dir_.glob(f"*.{ext}")
+                if x.is_file()
+            ]
+
+        for label_idx, (t_dir, v_dir) in enumerate(zip(train_dirs, valid_dirs)):
+            # if t_dir.name != v_dir.name:  # get images that exist in both directories.
+            #     continue
+            train = glob_img(t_dir)
+            valid = glob_img(v_dir)
+
+            self.all_list["train"].extend(train)
+            self.all_list["unknown"].extend(valid)
+            self.all_list["known"].extend(random.sample(train, len(valid)))
+
+            self.classes[label_idx] = t_dir.name
 
     def __get_dataset(self) -> None:
         r"""Get all datas from each directory."""
@@ -105,11 +143,11 @@ class CreateDataset(Dataset):
 
             self.classes[label_idx] = dir_.name
 
-        self.train_size = len(self.all_list["train"])
-        self.unknown_size = len(self.all_list["unknown"])
-        self.known_size = len(self.all_list["known"])
+        # self.train_size = len(self.all_list["train"])
+        # self.unknown_size = len(self.all_list["unknown"])
+        # self.known_size = len(self.all_list["known"])
 
-        self.all_size = self.train_size + self.unknown_size
+        # self.all_size = self.train_size + self.unknown_size
 
     def _write_config(self) -> None:
         r"""Writing configs."""

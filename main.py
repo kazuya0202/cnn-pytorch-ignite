@@ -1,5 +1,4 @@
 from argparse import ArgumentParser, Namespace
-from pathlib import Path
 from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
@@ -23,8 +22,7 @@ gc: GlobalConfig
 
 
 def run() -> None:
-    if not Path(gc.path.dataset).exists():
-        raise FileNotFoundError(f"'{gc.path.dataset}' is not exist.")
+    utils.check_existence(gc.path.dataset)
 
     transform = Compose(
         [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
@@ -145,8 +143,7 @@ def parse_arg() -> Namespace:
 
 
 def parse_yaml(path: str) -> GlobalConfig:
-    if not Path(path).exists:
-        raise FileNotFoundError(f"'{path}' is not exist.")
+    utils.check_existence(path)
 
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)

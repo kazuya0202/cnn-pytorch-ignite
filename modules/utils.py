@@ -1,6 +1,7 @@
 import itertools
 from dataclasses import dataclass, field
 from io import TextIOWrapper
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -167,6 +168,15 @@ def concat_path(
     if is_make:
         fp.mkdir(parents=True, exist_ok=True)
     return fp
+
+
+def check_existence(path: T._path_t) -> None:
+    if not is_exists(path):
+        raise FileNotFoundError(f"'{path}' does not exist.")
+
+
+def is_exists(path: T._path_t) -> bool:
+    return os.path.exists(path)
 
 
 def add_to_tensorboard(

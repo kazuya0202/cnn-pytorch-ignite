@@ -1,5 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Tuple
 
@@ -49,8 +50,7 @@ class ValidModel:
             )
 
     def __load(self, path: T._path_t):
-        if not Path(path).exists():
-            raise FileNotFoundError(f"'{path}' is not exist.'")
+        check_existence(path)
 
         cp = torch.load(path)
         self.classes = cp["classes"]
@@ -83,7 +83,9 @@ class ValidModel:
             pred = torch.max(x_sm.data, 1)
 
             label = int(pred[1].item())
-            return Predict(label, name=self.classes[label], rate=float(pred[0].item()), path=img_path)
+            return Predict(
+                label, name=self.classes[label], rate=float(pred[0].item()), path=img_path
+            )
 
     def preprocess(self, path: T._path_t) -> Tensor:
         img_pil = Image.open(path).convert("RGB")
@@ -119,12 +121,16 @@ def parse_arg() -> Namespace:
 
 
 def parse_yaml(path: str) -> TestConfig:
-    if not Path(path).exists:
-        raise FileNotFoundError(f"'{path}' is not exist.")
+    check_existence(path)
 
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
         return TestConfig(**data)
+
+
+def check_existence(path: T._path_t) -> None:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"'{path}' does not exist.")
 
 
 if __name__ == "__main__":

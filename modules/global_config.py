@@ -22,10 +22,15 @@ class Path_:
 @dataclass
 class Dataset_:
     limit_size: Optional[int] = -1
+
     valid_size: Union[int, float] = 0.1
-    extensions: List[str] = field(default_factory=list)
+
+    is_pre_splited: bool = False
+    train_dir: T._path_t = ""
+    valid_dir: T._path_t = ""
 
     is_shuffle_per_epoch: bool = True
+    extensions: List[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if self.limit_size == -1:
