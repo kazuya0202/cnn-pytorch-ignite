@@ -62,7 +62,11 @@ def run() -> None:
     def train_step(engine: Engine, batch: T._batch_path_t):
         minibatch = tutils.MiniBatch(batch)
         return impl.train_step(
-            minibatch, model, subdivisions=gc.network.subdivisions, non_blocking=True
+            minibatch,
+            model,
+            subdivisions=gc.network.subdivisions,
+            is_save_mistaken_pred=gc.option.is_save_mistaken_pred,
+            non_blocking=True,
         )
 
     def unknown_validation_step(engine: Engine, batch: T._batch_path_t):

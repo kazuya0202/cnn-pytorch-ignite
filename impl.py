@@ -5,11 +5,12 @@ from typing import Any, Dict, List, Optional, Tuple
 import ignite.contrib.handlers.tensorboard_logger as tbl
 import numpy as np
 import torch
+import tqdm
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from PIL import Image
 from torch.utils.data.dataloader import DataLoader
-import tqdm
+from torchvision.utils import save_image
 
 from gradcam import ExecuteGradCAM
 from modules import T
@@ -26,13 +27,13 @@ class Model:
     device: torch.device
 
 
-@dataclass
-class Predict:
-    pass
-
-
 def train_step(
-    minibatch: tutils.MiniBatch, model: Model, subdivisions: int, non_blocking: bool = False,
+    minibatch: tutils.MiniBatch,
+    model: Model,
+    subdivisions: int,
+    *,
+    is_save_mistaken_pred: bool = False,
+    non_blocking: bool = False,
 ):
     model.net.train()
     model.optimizer.zero_grad()
@@ -40,16 +41,20 @@ def train_step(
     pred_chunk = torch.tensor([], device=torch.device("cpu"))
     device = model.device
 
-    # total_loss = 0.0  # total loss of one batch
-    for x, _ in utils.subdivide_batch(
+    for x, y in utils.subdivide_batch(
         minibatch.batch, device, subdivisions=subdivisions + 1, non_blocking=non_blocking
     ):
         y_pred = model.net(x)
         pred_chunk = torch.cat((pred_chunk, y_pred.cpu()))
 
-        # loss = criterion(y_pred, y)
-        # loss.backward()
-        # total_loss += float(loss)
+        # save mistaken predicted image
+        if not is_save_mistaken_pred:
+            continue
+        ans = int(y[0].item())
+        pred = int(torch.max(y_pred.data, 1)[1].item())
+        if ans != pred:
+            save_image(x, str(minibatch.path))
+
     loss = model.criterion(pred_chunk.to(device), minibatch.batch[1].to(device))
     loss.backward()
     ret = loss.item()
@@ -57,7 +62,6 @@ def train_step(
 
     model.optimizer.step()
     return ret
-    # return total_loss / subdivisions  # avg loss in batch.
 
 
 def validation_step(
@@ -67,6 +71,7 @@ def validation_step(
     gc: GlobalConfig,
     gcam: ExecuteGradCAM,
     phase: str = "known",
+    *,
     non_blocking: bool = False,
 ) -> T._batch_t:
     model.net.eval()
@@ -247,7 +252,7 @@ def show_network_difinition(
 
     global_conf = {
         "run time": gc.filename_base,
-        "image path": gc.path.dataset,
+        "dataset path": gc.path.dataset,
         "supported extensions": gc.dataset.extensions,
         "saving debug log is": gc.option.is_save_log,
         # "saving rate log is": gc.option.is_save_rate_log,
@@ -256,8 +261,6 @@ def show_network_difinition(
         "saving final pth is": gc.network.is_save_final_model,
         "Grad-CAM is": gc.gradcam.enabled,
         "Grad-CAM layer": gc.gradcam.layer,
-        # "load model is ": gc.option.load_model_path,
-        # "load path": gc.option.load_model_path if gc.option.re_training else "None",
     }
 
     dataset_conf = {
@@ -265,6 +268,7 @@ def show_network_difinition(
         "train dataset size": dataset.train_size,
         "unknown dataset size": dataset.unknown_size,
         "known dataset size": dataset.known_size,
+        "shuffle dataset per epoch is": gc.dataset.is_shuffle_per_epoch,
     }
 
     model_conf = {
@@ -277,23 +281,21 @@ def show_network_difinition(
         "subdivisions": gc.network.subdivisions,
         "GPU available": torch.cuda.is_available(),
         "GPU used": gc.network.gpu_enabled,
-        # "re-training": ("available" if gc.option.is_available_re_training else "not available"),
     }
 
-    def _inner_execute(_dict: Dict[str, Any], header: str = "") -> None:
+    def show_config(dict_: Dict[str, Any], header: str = "") -> None:
         r"""execute.
 
         Args:
-            _dict (Dict[str, Any]): show contents.
-            head (str, optional): show before showing contents. Defaults to ''.
+            dict_ (Dict[str, Any]): show contents.
+            header (str, optional): show before showing contents. Defaults to ''.
         """
         gc.log.writeline(header, stdout=stdout)
 
         # adjust to max length of key
-        max_len = max([len(x) for x in _dict.keys()])
-        # _format = f'%-{max_len}s : %s'
+        max_len = max([len(x) for x in dict_.keys()])
 
-        for k, v in _dict.items():
+        for k, v in dict_.items():
             # format for structure of network
             if isinstance(v, str) and v.find("\n") > -1:
                 v = v.replace("\n", "\n" + " " * (max_len + 3)).rstrip()
@@ -304,7 +306,7 @@ def show_network_difinition(
     classes = {str(k): v for k, v in dataset.classes.items()}
 
     print()
-    _inner_execute(classes, "--- Classes ---")
-    _inner_execute(global_conf, "--- Global Configuration ---")
-    _inner_execute(dataset_conf, "--- Dataset Configuration ---")
-    _inner_execute(model_conf, "--- Model Configuration ---")
+    show_config(classes, "--- Classes ---")
+    show_config(global_conf, "--- Global Config ---")
+    show_config(dataset_conf, "--- Dataset Config ---")
+    show_config(model_conf, "--- Model Config ---")

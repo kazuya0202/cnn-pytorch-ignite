@@ -97,7 +97,7 @@ class MyProgressBar(ProgressBar):
         super().__init__(persist, bar_format, **tqdm_kwargs)
         self.logfile = logfile
 
-    def log_message(self, message: str = "", stdout: bool = True):
+    def log_message(self, message: str = "", *, stdout: bool = True):
         """
         Logs a message, preserving the progress bar correct output format.
 
