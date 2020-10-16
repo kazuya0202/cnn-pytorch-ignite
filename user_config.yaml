@@ -1,23 +1,24 @@
 path:
-  # dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
+  dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
   # dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
   # dataset: "D:\\workspace\\repos\\github.com\\kazuya0202\\cnn-with-pytorch\\dataset\\Images"
-  dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
+  # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
-  mistaken: "./mistaken"
-  model: "./pt_models"
-  config: "./config"
-  log: "./logs"
-  gradcam: "./GradCAM_results"
+  result_dir: "./results"
+  # mistaken: "./results/mistaken"
+  # model: "./results/models"
+  # config: "./results/config"
+  # log: "./results/logs"
+  # gradcam: "./results/GradCAM"
 
 dataset:
   limit_size: 500
   valid_size: 0.1
   # ^^^^^^^^ this configs are only valid when `is_pre_splited` is false.
 
-  is_pre_splited: true
-  train_dir: ''
-  valid_dir: ''
+  is_pre_splited: false
+  train_dir: ""
+  valid_dir: ""
   # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
 
   is_shuffle_per_epoch: true
@@ -52,7 +53,8 @@ option:
   is_show_network_difinition: false
   verbose: true
 
-  is_save_log: false
+  is_save_log: true
   is_save_mistaken_pred: false
   is_save_config: false
   log_tensorboard: false
+  is_save_cm: true  # confusion matrix

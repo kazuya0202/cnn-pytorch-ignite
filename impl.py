@@ -98,12 +98,13 @@ def validation_step(
 def validate_model(
     engine: Engine,
     _list: List[Tuple[Engine, DataLoader, str]],
+    gc: GlobalConfig,
     pbar: utils.MyProgressBar,
     classes: List[str],
     tb_logger: Optional[tbl.TensorboardLogger],
-    verbose: bool = True,
 ) -> None:
-    pbar.logfile.writeline(f"--- Epoch: {engine.state.epoch}/{engine.state.max_epochs} ---")
+    gc.logfile.writeline(f"--- Epoch: {engine.state.epoch}/{engine.state.max_epochs} ---")
+    gc.ratefile.write(f"{engine.state.epoch}")
 
     for evaluator, loader, phase in _list:
         evaluator.run(loader)
@@ -111,37 +112,50 @@ def validate_model(
         avg_acc = metrics["acc"]
         avg_loss = metrics["loss"]
 
-        pbar.log_message("", stdout=verbose)
+        pbar.log_message("", stdout=gc.option.verbose)
         pbar.log_message(f"{phase} Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}")
 
         cm = metrics["cm"]
+        phase_name = phase.split(" ")[0].lower()
 
         # confusion matrix
         title = f"Confusion Matrix - {phase} (Epoch {engine.state.epoch})"
         fig = utils.plot_confusion_matrix(cm, classes, title=title)
 
-        fig.savefig("a.jpg")  # type: ignore
-        # TODO - logsのlog.txtもフォルダ内に入れるようにしてcmも一緒に保存していく（連番）
+        if gc.option.is_save_cm:
+            p = gc.path.cm.joinpath(phase_name, f"epoch{engine.state.epoch}_{phase_name}.jpg")
+            p.parent.mkdir(parents=True, exist_ok=True)
+            fig.savefig(str(p))  # type: ignore
 
         if tb_logger:
-            title = "Confusion Matrix " + phase.split(" ")[0]
-            utils.add_to_tensorboard(tb_logger, fig, title, engine.state.epoch)
+            title = "Confusion Matrix " + phase_name.capitalize()
+            utils.add_image_to_tensorboard(tb_logger, fig, title, engine.state.epoch)
 
-        if verbose:
-            align_size = max([len(v) for v in classes]) + 2  # "[class_name]"
-            cm = cm.cpu().numpy()
-            for i, cls_name in enumerate(classes):
-                n_all = sum(cm[i])
-                n_acc = cm[i][i]
-                acc = n_acc / n_all
+        gc.ratefile.write(f",,")
 
-                cls_name = f"[{cls_name}]".ljust(align_size)
-                s = f" {cls_name} -> acc: {acc:<.3f} ({n_acc} / {n_all} images.)"
+        align_size = max([len(v) for v in classes]) + 2  # "[class_name]"
+        cm = cm.cpu().numpy()
+        for i, cls_name in enumerate(classes):
+            n_all = sum(cm[i])
+            n_acc = cm[i][i]
+            acc = n_acc / n_all
+
+            cls_name = f"[{cls_name}]".ljust(align_size)
+            s = f" {cls_name} -> acc: {acc:<.3f} ({n_acc} / {n_all} images.)"
+            if gc.option.verbose:
                 pbar.log_message(s)
 
+            gc.ratefile.write(f"{acc:<.3f},")
+
+        gc.ratefile.write(f"{avg_acc},")
+
     pbar.log_message("")
-    pbar.log_message("", stdout=verbose)
+    pbar.log_message("", stdout=gc.option.verbose)
     pbar.n = pbar.last_print_n = 0  # type: ignore
+
+    gc.logfile.flush()
+    gc.ratefile.writeline()
+    gc.ratefile.flush()
 
 
 def execute_gradcam(
@@ -300,7 +314,7 @@ def show_network_difinition(
             dict_ (Dict[str, Any]): show contents.
             header (str, optional): show before showing contents. Defaults to ''.
         """
-        gc.log.writeline(header, stdout=stdout)
+        gc.logfile.writeline(header, stdout=stdout)
 
         # adjust to max length of key
         max_len = max([len(x) for x in dict_.keys()])
@@ -310,8 +324,8 @@ def show_network_difinition(
             if isinstance(v, str) and v.find("\n") > -1:
                 v = v.replace("\n", "\n" + " " * (max_len + 3)).rstrip()
 
-            gc.log.writeline(f"{k.center(max_len)} : {v}", stdout=stdout)
-        gc.log.writeline("", stdout=stdout)
+            gc.logfile.writeline(f"{k.center(max_len)} : {v}", stdout=stdout)
+        gc.logfile.writeline("", stdout=stdout)
 
     classes = {str(k): v for k, v in dataset.classes.items()}
 
@@ -320,3 +334,5 @@ def show_network_difinition(
     show_config(global_conf, "--- Global Config ---")
     show_config(dataset_conf, "--- Dataset Config ---")
     show_config(model_conf, "--- Model Config ---")
+
+    gc.logfile.flush()

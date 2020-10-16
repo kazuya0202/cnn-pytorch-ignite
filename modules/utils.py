@@ -63,6 +63,10 @@ class LogFile:
         if stdout:
             print(line, end="")
 
+    def flush(self) -> None:
+        if self._is_write:
+            self._file.flush()
+
     def _clear(self) -> None:
         if not self._is_write:
             return
@@ -183,7 +187,7 @@ def replace_backslash(s: T._path_t) -> Path:
     return Path(str(s).replace("\\\\", "\\"))
 
 
-def add_to_tensorboard(
+def add_image_to_tensorboard(
     tb_logger: TensorboardLogger, fig: plt.Figure, title: str, step: int = 0
 ) -> None:
     r"""Add plot image to TensorBoard.

@@ -4,6 +4,8 @@ GradCAM_results/
 logs/
 config/
 
+results/**/
+
 
 ### Python
 

@@ -12,19 +12,23 @@ from . import T, utils
 @dataclass
 class Path_:
     dataset: T._path_t = r"./dataset"
-    mistaken: T._path_t = r"./mistaken"
-    model: T._path_t = r"./models"
-    config: T._path_t = r"./config"
-    log: T._path_t = r"./logs"
-    gradcam: T._path_t = r"./GradCAM_results"
+    result_dir: T._path_t = r"./results"
+
+    mistaken: Path = field(init=False)
+    model: Path = field(init=False)
+    config: Path = field(init=False)
+    gradcam: Path = field(init=False)
+    log: Path = field(init=False)
+    cm: Path = field(init=False)
 
     def __post_init__(self) -> None:
         self.dataset = utils.replace_backslash(self.dataset)
-        self.mistaken = utils.replace_backslash(self.mistaken)
-        self.model = utils.replace_backslash(self.model)
-        self.config = utils.replace_backslash(self.config)
-        self.log = utils.replace_backslash(self.log)
-        self.gradcam = utils.replace_backslash(self.gradcam)
+        self.result_dir = utils.replace_backslash(self.result_dir)
+        # self.mistaken = utils.replace_backslash(self.mistaken)
+        # self.model = utils.replace_backslash(self.model)
+        # self.config = utils.replace_backslash(self.config)
+        # self.log = utils.replace_backslash(self.log)
+        # self.gradcam = utils.replace_backslash(self.gradcam)
 
 
 @dataclass
@@ -97,6 +101,7 @@ class Option_:
     is_save_mistaken_pred: bool = False
     is_save_config: bool = False
     log_tensorboard: bool = False
+    is_save_cm: bool = False
 
 
 @dataclass
@@ -110,7 +115,7 @@ class GlobalConfig:
     option: Option_ = field(init=False)
 
     filename_base: str = field(init=False)
-    log: utils.LogFile = field(init=False)
+    logfile: utils.LogFile = field(init=False)
 
     def __post_init__(self):
         if not self.__data:  # empty dict
@@ -127,22 +132,23 @@ class GlobalConfig:
         self.option = create_instance(Option_, "option")
 
         self.filename_base = datetime.now().strftime("%Y%b%d_%Hh%Mm%Ss")
-        self.log = utils.LogFile(stdout=False)
+        self.logfile = utils.LogFile(stdout=False)
+        self.ratefile = utils.LogFile(stdout=False)
+
+        def mk_path(path: T._path_t, is_make: bool) -> Path:
+            # return utils.concat_path(path, self.filename_base, is_make=is_make)
+            return utils.concat_path(base_path, path, is_make=is_make)
 
         # determine directory structure / make directory
-        self.path.mistaken = utils.concat_path(
-            self.path.mistaken, self.filename_base, is_make=self.option.is_save_mistaken_pred
+        base_path = Path(self.path.result_dir, self.filename_base)
+        self.path.mistaken = mk_path("mistaken", is_make=self.option.is_save_mistaken_pred)
+        self.path.model = mk_path(
+            "models", is_make=self.network.save_cycle != 0 or self.network.is_save_final_model,
         )
-        self.path.model = utils.concat_path(
-            self.path.model,
-            self.filename_base,
-            is_make=self.network.save_cycle != 0 or self.network.is_save_final_model,
-        )
-        self.path.config = utils.concat_path(
-            self.path.config, self.filename_base, is_make=self.option.is_save_config
-        )
-        self.path.gradcam = utils.concat_path(
-            self.path.gradcam, self.filename_base, is_make=self.gradcam.enabled
-        )
+        self.path.config = mk_path("config", is_make=self.option.is_save_config)
+        self.path.gradcam = mk_path("GradCAM", is_make=self.gradcam.enabled)
+        self.path.cm = mk_path("confusion_matrix", is_make=self.option.is_save_cm)
 
-        Path(self.path.log).mkdir(parents=True, exist_ok=True)
+        self.path.log = base_path
+        if self.option.is_save_log:
+            self.path.log.mkdir(parents=True, exist_ok=True)

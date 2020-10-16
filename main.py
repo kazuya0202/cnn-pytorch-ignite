@@ -1,4 +1,5 @@
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
 from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
@@ -6,6 +7,7 @@ import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
+
 # from ignite.metrics.running_average import RunningAverage
 from torch import nn, optim
 from torch.utils.data.dataloader import DataLoader
@@ -52,8 +54,14 @@ def run() -> None:
 
     # logfile
     if gc.option.is_save_log:
-        p = utils.create_filepath(gc.path.log, gc.filename_base, is_prefix_seq=True)
-        gc.log = utils.LogFile(p, stdout=False)
+        p = Path(gc.path.log, "log.txt")
+        gc.logfile = utils.LogFile(p, stdout=False)
+
+        p = Path(gc.path.log, "rate.csv")
+        gc.ratefile = utils.LogFile(p, stdout=False)
+
+        classes_ = ",".join(classes)
+        gc.ratefile.writeline(f"epoch,known,{classes_},avg,,unknown,{classes_},avg")
 
     # netword difinition
     impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
@@ -62,7 +70,7 @@ def run() -> None:
         classes,
         input_size=gc.network.input_size,
         target_layer=gc.gradcam.layer,
-        device=gc.network.device,
+        device=device,
         is_gradcam=gc.gradcam.enabled,
     )
 
@@ -102,7 +110,7 @@ def run() -> None:
     # RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
 
     # progress bar
-    pbar = utils.MyProgressBar(persist=True, logfile=gc.log)
+    pbar = utils.MyProgressBar(persist=True, logfile=gc.logfile)
     pbar.attach(trainer, metric_names="all")
 
     collect_list = [
@@ -123,9 +131,7 @@ def run() -> None:
 
     def validate_model(engine: Engine, collect_list: List[Tuple[Engine, DataLoader, str]]):
         if valid_schedule[engine.state.epoch - 1]:
-            impl.validate_model(
-                engine, collect_list, pbar, classes, tb_logger, verbose=gc.option.verbose,
-            )
+            impl.validate_model(engine, collect_list, gc, pbar, classes, tb_logger)
 
     def save_model(engine: Engine):
         epoch = engine.state.epoch
@@ -143,7 +149,7 @@ def run() -> None:
     if gc.option.log_tensorboard:
         tb_logger.close()
     if gc.option.is_save_log:
-        gc.log.close()
+        gc.logfile.close()
 
 
 def parse_arg() -> Namespace:
