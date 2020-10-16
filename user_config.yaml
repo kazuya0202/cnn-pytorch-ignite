@@ -5,11 +5,6 @@ path:
   # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
   result_dir: "./results"
-  # mistaken: "./results/mistaken"
-  # model: "./results/models"
-  # config: "./results/config"
-  # log: "./results/logs"
-  # gradcam: "./results/GradCAM"
 
 dataset:
   limit_size: 500
@@ -53,8 +48,8 @@ option:
   is_show_network_difinition: false
   verbose: true
 
-  is_save_log: true
+  is_save_log: false
   is_save_mistaken_pred: false
   is_save_config: false
   log_tensorboard: false
-  is_save_cm: true  # confusion matrix
+  is_save_cm: false  # confusion matrix
