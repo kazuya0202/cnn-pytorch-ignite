@@ -41,11 +41,17 @@ def train_step(
     pred_chunk = torch.tensor([], device=torch.device("cpu"))
     device = model.device
 
-    for x, y in utils.subdivide_batch(
+    total_loss = 0.0
+
+    for (x, y), iter_size in utils.subdivide_batch(
         minibatch.batch, device, subdivisions=subdivisions + 1, non_blocking=non_blocking
     ):
         y_pred = model.net(x)
-        pred_chunk = torch.cat((pred_chunk, y_pred.cpu()))
+        # pred_chunk = torch.cat((pred_chunk, y_pred.cpu()))
+        # loss = model.criterion(y_pred, y)
+        loss = model.criterion(y_pred, y) / iter_size
+        loss.backward()
+        total_loss += loss.item()
 
         # save mistaken predicted image
         if not is_save_mistaken_pred:
@@ -55,13 +61,14 @@ def train_step(
         if ans != pred:
             save_image(x, str(minibatch.path))
 
-    loss = model.criterion(pred_chunk.to(device), minibatch.batch[1].to(device))
-    loss.backward()
-    ret = loss.item()
-    del loss
+    # loss = model.criterion(pred_chunk.to(device), minibatch.batch[1].to(device))
+    # loss.backward()
+    # ret = loss.item()
+    # del loss
 
     model.optimizer.step()
-    return ret
+    return total_loss / subdivisions
+    # return ret
 
 
 def validation_step(

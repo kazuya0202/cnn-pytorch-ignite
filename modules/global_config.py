@@ -18,6 +18,14 @@ class Path_:
     log: T._path_t = r"./logs"
     gradcam: T._path_t = r"./GradCAM_results"
 
+    def __post_init__(self) -> None:
+        self.dataset = utils.replace_backslash(self.dataset)
+        self.mistaken = utils.replace_backslash(self.mistaken)
+        self.model = utils.replace_backslash(self.model)
+        self.config = utils.replace_backslash(self.config)
+        self.log = utils.replace_backslash(self.log)
+        self.gradcam = utils.replace_backslash(self.gradcam)
+
 
 @dataclass
 class Dataset_:
@@ -38,6 +46,9 @@ class Dataset_:
 
         if not self.extensions:
             self.extensions = ["jpg", "png", "jpeg", "bmp"]
+
+        self.train_dir = utils.replace_backslash(self.train_dir)
+        self.valid_dir = utils.replace_backslash(self.valid_dir)
 
 
 @dataclass

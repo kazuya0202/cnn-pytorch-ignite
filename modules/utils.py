@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from io import TextIOWrapper
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -125,7 +125,7 @@ def prepare_batch(
 
 def subdivide_batch(
     batch: T._batch_t, device: torch.device, subdivisions: int, non_blocking: bool = False,
-) -> Iterator[T._batch_t]:
+) -> Iterator[Tuple[T._batch_t, int]]:
     x, y = batch
     batch_len = x.size()[0]
     sep = np.linspace(start=0, stop=batch_len, num=subdivisions + 1, dtype=np.int)
@@ -134,7 +134,7 @@ def subdivide_batch(
         batch = (x[n:m], y[n:m])
         if batch[0].size()[0] == 0:
             continue
-        yield prepare_batch(batch, device, non_blocking=non_blocking)
+        yield prepare_batch(batch, device, non_blocking=non_blocking), m - n
 
 
 def attach_metrics(evaluator: Engine, metrics: Dict[str, Any]) -> None:
@@ -177,6 +177,10 @@ def check_existence(path: T._path_t) -> None:
 
 def is_exists(path: T._path_t) -> bool:
     return os.path.exists(path)
+
+
+def replace_backslash(s: T._path_t) -> Path:
+    return Path(str(s).replace("\\\\", "\\"))
 
 
 def add_to_tensorboard(

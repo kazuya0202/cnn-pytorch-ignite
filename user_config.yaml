@@ -1,8 +1,8 @@
 path:
-  # dataset: 'D:\workspace\repos\gitlab.com\ichiya\prcn2019-datasets\datasets\Images-20191014'
-  # dataset: 'D:\workspace\pro\__dataset\bird_by_yokoyama'
-  # dataset: "D:/workspace/repos/github.com/kazuya0202/cnn-with-pytorch/dataset/Images"
-  dataset: 'C:\ichiya\prcn2019\prcn2019-datasets\datasets\Images-20191014'
+  # dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
+  # dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
+  # dataset: "D:\\workspace\\repos\\github.com\\kazuya0202\\cnn-with-pytorch\\dataset\\Images"
+  dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
   mistaken: "./mistaken"
   model: "./pt_models"

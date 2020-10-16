@@ -87,9 +87,6 @@ class CreateDataset(Dataset):
         self.classes = {}
 
     def __get_dataset_from_dir(self) -> None:
-        utils.check_existence(self.gc.dataset.train_dir)
-        utils.check_existence(self.gc.dataset.valid_dir)
-
         train_dirs = [x for x in Path(self.gc.dataset.train_dir).glob("*") if x.is_dir()]
         valid_dirs = [x for x in Path(self.gc.dataset.valid_dir).glob("*") if x.is_dir()]
 

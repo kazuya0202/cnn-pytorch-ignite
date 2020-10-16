@@ -6,7 +6,7 @@ import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
-from ignite.metrics.running_average import RunningAverage
+# from ignite.metrics.running_average import RunningAverage
 from torch import nn, optim
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
@@ -22,13 +22,20 @@ gc: GlobalConfig
 
 
 def run() -> None:
-    utils.check_existence(gc.path.dataset)
-
     transform = Compose(
         [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
 
-    print(f"Creating dataset from '{gc.path.dataset}'...")
+    if gc.dataset.is_pre_splited:
+        utils.check_existence(gc.dataset.train_dir)
+        utils.check_existence(gc.dataset.valid_dir)
+        print(f"Creating dataset from")
+        print(f"  train - '{gc.dataset.train_dir}'...")
+        print(f"  valid - '{gc.dataset.valid_dir}'...")
+    else:
+        utils.check_existence(gc.path.dataset)
+        print(f"Creating dataset from '{gc.path.dataset}'...")
+
     dataset = tutils.CreateDataset(gc)  # train, unknown, known
     train_loader, unknown_loader, known_loader = dataset.get_dataloader(transform)
     del dataset.all_list
@@ -92,7 +99,7 @@ def run() -> None:
     utils.attach_metrics(unknown_evaluator, metrics)
     utils.attach_metrics(known_evaluator, metrics)
 
-    RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
+    # RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
 
     # progress bar
     pbar = utils.MyProgressBar(persist=True, logfile=gc.log)
