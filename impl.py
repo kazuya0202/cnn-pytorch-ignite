@@ -117,10 +117,13 @@ def validate_model(
         cm = metrics["cm"]
 
         # confusion matrix
-        if tb_logger:
-            title = f"Confusion Matrix - {phase} (Epoch {engine.state.epoch})"
-            fig = utils.plot_confusion_matrix(cm, classes, title=title)
+        title = f"Confusion Matrix - {phase} (Epoch {engine.state.epoch})"
+        fig = utils.plot_confusion_matrix(cm, classes, title=title)
 
+        fig.savefig("a.jpg")  # type: ignore
+        # TODO - logsのlog.txtもフォルダ内に入れるようにしてcmも一緒に保存していく（連番）
+
+        if tb_logger:
             title = "Confusion Matrix " + phase.split(" ")[0]
             utils.add_to_tensorboard(tb_logger, fig, title, engine.state.epoch)
 
