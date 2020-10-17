@@ -33,22 +33,17 @@ def train_step(
     subdivisions: int,
     *,
     is_save_mistaken_pred: bool = False,
-    non_blocking: bool = False,
+    non_blocking: bool = True,
 ):
     model.net.train()
     model.optimizer.zero_grad()
 
-    pred_chunk = torch.tensor([], device=torch.device("cpu"))
-    device = model.device
-
     total_loss = 0.0
 
     for (x, y), iter_size in utils.subdivide_batch(
-        minibatch.batch, device, subdivisions=subdivisions + 1, non_blocking=non_blocking
+        minibatch.batch, model.device, subdivisions=subdivisions + 1, non_blocking=non_blocking
     ):
         y_pred = model.net(x)
-        # pred_chunk = torch.cat((pred_chunk, y_pred.cpu()))
-        # loss = model.criterion(y_pred, y)
         loss = model.criterion(y_pred, y) / iter_size
         loss.backward()
         total_loss += loss.item()
@@ -56,19 +51,13 @@ def train_step(
         # save mistaken predicted image
         if not is_save_mistaken_pred:
             continue
-        ans = int(y[0].item())
-        pred = int(torch.max(y_pred.data, 1)[1].item())
+
+        ans, pred = utils.get_label(y, y_pred)
         if ans != pred:
             save_image(x, str(minibatch.path))
 
-    # loss = model.criterion(pred_chunk.to(device), minibatch.batch[1].to(device))
-    # loss.backward()
-    # ret = loss.item()
-    # del loss
-
     model.optimizer.step()
     return total_loss / subdivisions
-    # return ret
 
 
 def validation_step(
@@ -79,17 +68,15 @@ def validation_step(
     gcam: ExecuteGradCAM,
     phase: str = "known",
     *,
-    non_blocking: bool = False,
+    non_blocking: bool = True,
 ) -> T._batch_t:
     model.net.eval()
-    device = model.device
 
     with torch.no_grad():
-        x, y = utils.prepare_batch(minibatch.batch, device, non_blocking=non_blocking)
+        x, y = utils.prepare_batch(minibatch.batch, model.device, non_blocking=non_blocking)
         y_pred = model.net(x)
 
-        ans = int(y[0].item())
-        pred = int(torch.max(y_pred.data, 1)[1].item())
+        ans, pred = utils.get_label(y, y_pred)
         execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
 
         return y_pred, y
@@ -97,39 +84,40 @@ def validation_step(
 
 def validate_model(
     engine: Engine,
-    _list: List[Tuple[Engine, DataLoader, str]],
+    collect_list: List[Tuple[Engine, DataLoader, str]],
     gc: GlobalConfig,
     pbar: utils.MyProgressBar,
     classes: List[str],
     tb_logger: Optional[tbl.TensorboardLogger],
 ) -> None:
-    gc.logfile.writeline(f"--- Epoch: {engine.state.epoch}/{engine.state.max_epochs} ---")
-    gc.ratefile.write(f"{engine.state.epoch}")
+    epoch_num = engine.state.epoch
+    gc.logfile.writeline(f"--- Epoch: {epoch_num}/{engine.state.max_epochs} ---")
+    gc.ratefile.write(f"{epoch_num}")
 
-    for evaluator, loader, phase in _list:
+    for evaluator, loader, phase in collect_list:
         evaluator.run(loader)
         metrics = evaluator.state.metrics
         avg_acc = metrics["acc"]
         avg_loss = metrics["loss"]
 
-        pbar.log_message("", stdout=gc.option.verbose)
+        pbar.log_message("")
         pbar.log_message(f"{phase} Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}")
 
         cm = metrics["cm"]
         phase_name = phase.split(" ")[0].lower()
 
         # confusion matrix
-        title = f"Confusion Matrix - {phase} (Epoch {engine.state.epoch})"
+        title = f"Confusion Matrix - {phase} (Epoch {epoch_num})"
         fig = utils.plot_confusion_matrix(cm, classes, title=title)
 
         if gc.option.is_save_cm:
-            p = gc.path.cm.joinpath(phase_name, f"epoch{engine.state.epoch}_{phase_name}.jpg")
+            p = gc.path.cm.joinpath(phase_name, f"epoch{epoch_num}_{phase_name}.jpg")
             p.parent.mkdir(parents=True, exist_ok=True)
             fig.savefig(str(p))  # type: ignore
 
         if tb_logger:
             title = "Confusion Matrix " + phase_name.capitalize()
-            utils.add_image_to_tensorboard(tb_logger, fig, title, engine.state.epoch)
+            utils.add_image_to_tensorboard(tb_logger, fig, title, epoch_num)
 
         gc.ratefile.write(f",,")
 
@@ -142,15 +130,13 @@ def validate_model(
 
             cls_name = f"[{cls_name}]".ljust(align_size)
             s = f" {cls_name} -> acc: {acc:<.3f} ({n_acc} / {n_all} images.)"
-            if gc.option.verbose:
-                pbar.log_message(s)
+            pbar.log_message(s)
 
             gc.ratefile.write(f"{acc:<.3f},")
 
         gc.ratefile.write(f"{avg_acc},")
 
-    pbar.log_message("")
-    pbar.log_message("", stdout=gc.option.verbose)
+    pbar.log_message("\n")
     pbar.n = pbar.last_print_n = 0  # type: ignore
 
     gc.logfile.flush()
@@ -274,39 +260,6 @@ def show_network_difinition(
         dataset (tu.CreateDataset): dataset.
     """
 
-    global_conf = {
-        "run time": gc.filename_base,
-        "dataset path": gc.path.dataset,
-        "supported extensions": gc.dataset.extensions,
-        "saving debug log is": gc.option.is_save_log,
-        # "saving rate log is": gc.option.is_save_rate_log,
-        "pt save cycle": gc.network.save_cycle,
-        "valid cycle": gc.network.valid_cycle,
-        "saving final pth is": gc.network.is_save_final_model,
-        "Grad-CAM is": gc.gradcam.enabled,
-        "Grad-CAM layer": gc.gradcam.layer,
-    }
-
-    dataset_conf = {
-        "limit dataset size": gc.dataset.limit_size,
-        "train dataset size": dataset.train_size,
-        "unknown dataset size": dataset.unknown_size,
-        "known dataset size": dataset.known_size,
-        "shuffle dataset per epoch is": gc.dataset.is_shuffle_per_epoch,
-    }
-
-    model_conf = {
-        "net": str(model.net),
-        "optimizer": str(model.optimizer),
-        "criterion": str(model.criterion),
-        "input size": f"(h: {gc.network.height}, w: {gc.network.width})",
-        "epoch": gc.network.epoch,
-        "batch size": gc.network.batch,
-        "subdivisions": gc.network.subdivisions,
-        "GPU available": torch.cuda.is_available(),
-        "GPU used": gc.network.gpu_enabled,
-    }
-
     def show_config(dict_: Dict[str, Any], header: str = "") -> None:
         r"""execute.
 
@@ -315,9 +268,7 @@ def show_network_difinition(
             header (str, optional): show before showing contents. Defaults to ''.
         """
         gc.logfile.writeline(header, stdout=stdout)
-
-        # adjust to max length of key
-        max_len = max([len(x) for x in dict_.keys()])
+        max_len = max([len(x) for x in dict_.keys()])  # adjust to max length of key
 
         for k, v in dict_.items():
             # format for structure of network
@@ -327,12 +278,62 @@ def show_network_difinition(
             gc.logfile.writeline(f"{k.center(max_len)} : {v}", stdout=stdout)
         gc.logfile.writeline("", stdout=stdout)
 
+    base_conf = {
+        "run time": gc.filename_base,
+        "dataset path": (
+            f"\n  train - {gc.dataset.train_dir}\n  valid - {gc.dataset.valid_dir}"
+            if gc.dataset.is_pre_splited
+            else str(gc.path.dataset)
+        ),
+        "result path": gc.path.result_dir,
+    }
+    dataset_conf = {
+        "limit dataset size": gc.dataset.limit_size,
+        "shuffle dataset per epoch is": gc.dataset.is_shuffle_per_epoch,
+        "supported extensions": gc.dataset.extensions,
+    }
+    gradcam_conf = {
+        "Grad-CAM is": gc.gradcam.enabled,
+        "Grad-CAM execute only mistaken": gc.gradcam.only_mistaken,
+        "Grad-CAM layer": gc.gradcam.layer,
+    }
+    network_conf = {
+        "input size": f"(h: {gc.network.height}, w: {gc.network.width})",
+        "channels": gc.network.channels,
+        "epoch": gc.network.epoch,
+        "batch size": gc.network.batch,
+        "subdivisions": gc.network.subdivisions,
+        "cycle of saving": gc.network.save_cycle,
+        "cycle of validation": gc.network.valid_cycle,
+        "GPU available": torch.cuda.is_available(),
+        "GPU used": gc.network.gpu_enabled,
+        "saving final pth is": gc.network.is_save_final_model,
+    }
+    option_conf = {
+        "saving mistaken prediction is": gc.option.is_save_mistaken_pred,
+        "saving log is": gc.option.is_save_log,
+        "saving config is": gc.option.is_save_config,
+        "logging TensorBoard is": gc.option.log_tensorboard,
+        "saving Confusion-Matrix is": gc.option.is_save_cm,
+    }
+    model_conf = {
+        "net": str(model.net),
+        "optimizer": str(model.optimizer),
+        "criterion": str(model.criterion),
+        "train dataset size": dataset.train_size,
+        "unknown dataset size": dataset.unknown_size,
+        "known dataset size": dataset.known_size,
+    }
+
     classes = {str(k): v for k, v in dataset.classes.items()}
 
     print()
     show_config(classes, "--- Classes ---")
-    show_config(global_conf, "--- Global Config ---")
-    show_config(dataset_conf, "--- Dataset Config ---")
-    show_config(model_conf, "--- Model Config ---")
+    show_config(base_conf, "--- Base ---")
+    show_config(dataset_conf, "--- Dataset ---")
+    show_config(gradcam_conf, "--- Grad-CAM ---")
+    show_config(network_conf, "--- Network ---")
+    show_config(option_conf, "--- Option ---")
+    show_config(model_conf, "--- Model ---")
 
     gc.logfile.flush()

@@ -1,4 +1,4 @@
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 from pathlib import Path
 from typing import List, Tuple
 
@@ -7,9 +7,8 @@ import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
-
 # from ignite.metrics.running_average import RunningAverage
-from torch import nn, optim
+from torch import nn
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
@@ -20,8 +19,6 @@ from modules import torch_utils as tutils
 from modules import utils
 from modules.global_config import GlobalConfig
 
-gc: GlobalConfig
-
 
 def run() -> None:
     transform = Compose(
@@ -29,26 +26,31 @@ def run() -> None:
     )
 
     if gc.dataset.is_pre_splited:
-        utils.check_existence(gc.dataset.train_dir)
-        utils.check_existence(gc.dataset.valid_dir)
+        utils.check_existence([gc.dataset.train_dir, gc.dataset.valid_dir])
         print(f"Creating dataset from")
-        print(f"  train - '{gc.dataset.train_dir}'...")
+        print(f"  train - '{gc.dataset.train_dir}'")
         print(f"  valid - '{gc.dataset.valid_dir}'...")
     else:
         utils.check_existence(gc.path.dataset)
         print(f"Creating dataset from '{gc.path.dataset}'...")
 
     dataset = tutils.CreateDataset(gc)  # train, unknown, known
+    if dataset.all_size == 0:
+        raise ValueError(f"data size == 0, path of dataset is invalid.")
+
     train_loader, unknown_loader, known_loader = dataset.get_dataloader(transform)
+
+    if gc.option.is_save_config:
+        dataset.write_config()  # write config of model
     del dataset.all_list
 
     classes = list(dataset.classes.values())
     device = gc.network.device
 
-    print(f"Building network by '{gc.network.class_.__name__}'...")
-    net = gc.network.class_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
+    print(f"Building network by '{gc.network.net_.__name__}'...")
+    net = gc.network.net_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
     model = impl.Model(
-        net, optimizer=optim.Adam(net.parameters()), criterion=nn.CrossEntropyLoss(), device=device,
+        net, optimizer=gc.network.optim_(net.parameters()), criterion=nn.CrossEntropyLoss(), device=device,
     )
     del net
 
@@ -62,6 +64,7 @@ def run() -> None:
 
         classes_ = ",".join(classes)
         gc.ratefile.writeline(f"epoch,known,{classes_},avg,,unknown,{classes_},avg")
+        gc.ratefile.flush()
 
     # netword difinition
     impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
@@ -107,8 +110,6 @@ def run() -> None:
     utils.attach_metrics(unknown_evaluator, metrics)
     utils.attach_metrics(known_evaluator, metrics)
 
-    # RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
-
     # progress bar
     pbar = utils.MyProgressBar(persist=True, logfile=gc.logfile)
     pbar.attach(trainer, metric_names="all")
@@ -150,25 +151,25 @@ def run() -> None:
         tb_logger.close()
     if gc.option.is_save_log:
         gc.logfile.close()
-
-
-def parse_arg() -> Namespace:
-    parser = ArgumentParser()
-    parser.add_argument("-c", "--cfg", help="config file", default="user_config.yaml")
-
-    return parser.parse_args()
+        gc.ratefile.close()
 
 
 def parse_yaml(path: str) -> GlobalConfig:
     utils.check_existence(path)
 
+    gc: GlobalConfig
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
-        return GlobalConfig(data)
+        gc = GlobalConfig(data)
+    return gc
 
 
 if __name__ == "__main__":
-    args = parse_arg()
+    parser = ArgumentParser()
+    parser.add_argument("-c", "--cfg", help="config file", default="user_config.yaml")
+
+    args = parser.parse_args()
+
     print(f"Loading config from '{args.cfg}'...")
     gc = parse_yaml(path=args.cfg)
 

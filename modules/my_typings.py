@@ -4,6 +4,7 @@ from typing import Tuple, Type, Union
 
 import cnn
 from torch import Tensor, nn, optim
+from modules.radam import RAdam
 
 
 @dataclass(frozen=True)
@@ -13,10 +14,12 @@ class T:
     _batch_t = Tuple[Tensor, Tensor]
     _batch_path_t = Tuple[Tensor, Tensor, Tensor]
 
-    _net_t = Union[cnn.Net, cnn.VGG16, cnn.LightNet]
-    _type_net_t = Union[Type[cnn.Net], Type[cnn.VGG16], Type[cnn.LightNet]]
-    _optim_t = Union[optim.Adam, optim.SGD]
+    _net_t = Union[cnn.Net, cnn.LightNet]
+    _optim_t = Union[optim.Adam, RAdam]
     _criterion_t = Union[nn.CrossEntropyLoss]
+
+    _type_optim_t = Union[Type[optim.Adam], Type[RAdam]]
+    _type_net_t = Union[Type[cnn.Net], Type[cnn.LightNet]]
 
 
 @dataclass(frozen=True)

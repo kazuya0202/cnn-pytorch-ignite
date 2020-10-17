@@ -3,6 +3,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 
+from torch import optim
+
 import cnn
 import torch
 
@@ -24,11 +26,6 @@ class Path_:
     def __post_init__(self) -> None:
         self.dataset = utils.replace_backslash(self.dataset)
         self.result_dir = utils.replace_backslash(self.result_dir)
-        # self.mistaken = utils.replace_backslash(self.mistaken)
-        # self.model = utils.replace_backslash(self.model)
-        # self.config = utils.replace_backslash(self.config)
-        # self.log = utils.replace_backslash(self.log)
-        # self.gradcam = utils.replace_backslash(self.gradcam)
 
 
 @dataclass
@@ -38,8 +35,8 @@ class Dataset_:
     valid_size: Union[int, float] = 0.1
 
     is_pre_splited: bool = False
-    train_dir: T._path_t = ""
-    valid_dir: T._path_t = ""
+    train_dir: T._path_t = r"./dataset/train"
+    valid_dir: T._path_t = r"./dataset/valid"
 
     is_shuffle_per_epoch: bool = True
     extensions: List[str] = field(default_factory=list)
@@ -78,8 +75,11 @@ class Network_:
     gpu_enabled: bool = True
     is_save_final_model: bool = True
 
-    class_name: str = "Net"
-    class_: T._type_net_t = cnn.Net
+    net_name: str = "Net"
+    net_: T._type_net_t = cnn.Net
+
+    optim_name: str = "Adam"
+    optim_: T._type_optim_t = optim.Adam
 
     input_size: Tuple[int, int] = field(init=False)  # height, width
     device: torch.device = field(init=False)
@@ -89,15 +89,19 @@ class Network_:
         self.gpu_enabled = torch.cuda.is_available() and self.gpu_enabled
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
 
-        self.class_ = eval(f"cnn.{self.class_name}")
+        self.net_ = eval(f"cnn.{self.net_name}")
+        if self.optim_name == "RAdam":
+            from modules.radam import RAdam
+
+            self.optim_ = RAdam
+        else:
+            self.optim_ = eval(f"optim.{self.optim_name}")
 
 
 @dataclass
 class Option_:
     is_show_network_difinition: bool = True
-    verbose: bool = True
-
-    is_save_log: bool = False
+    is_save_log: bool = True
     is_save_mistaken_pred: bool = False
     is_save_config: bool = False
     log_tensorboard: bool = False

@@ -11,7 +11,7 @@ dataset:
   valid_size: 0.1
   # ^^^^^^^^ this configs are only valid when `is_pre_splited` is false.
 
-  is_pre_splited: false
+  is_pre_splited: true
   train_dir: ""
   valid_dir: ""
   # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
@@ -41,13 +41,14 @@ network:
   # is_save_final_model: true
   is_save_final_model: false
 
-  class_name: "LightNet"
-  # class_name: "Net"  # ["Net", "LightNet", "VGG16"] in cnn.py
+  net_name: "LightNet"
+  optim_name: "RAdam"
+
+  # class_name: "Net"  # ["Net", "LightNet"] in cnn.py
+  # optim_name: "Adam"  # ["Adam", "RAdam"]
 
 option:
-  is_show_network_difinition: false
-  verbose: true
-
+  is_show_network_difinition: true
   is_save_log: false
   is_save_mistaken_pred: false
   is_save_config: false

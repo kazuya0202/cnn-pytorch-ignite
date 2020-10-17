@@ -37,7 +37,7 @@ class LogFile:
         self._is_write = True
 
         if self.clear:
-            self._clear()
+            self.__clear()
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.touch(exist_ok=True)
@@ -46,12 +46,12 @@ class LogFile:
         self._file = self._path.open("a")
 
     def write(self, line: object = "", stdout: Optional[bool] = None) -> None:
-        self._write(f"{line}", f"\r{line}", stdout=self._is_stdout(stdout))
+        self.__write(f"{line}", f"\r{line}", stdout=self.__is_stdout(stdout))
 
     def writeline(self, line: object = "", stdout: Optional[bool] = None) -> None:
-        self._write(content=f"{line}\n", line=f"{line}\n", stdout=self._is_stdout(stdout))
+        self.__write(content=f"{line}\n", line=f"{line}\n", stdout=self.__is_stdout(stdout))
 
-    def _write(self, content: str, line: object, stdout: bool) -> None:
+    def __write(self, content: str, line: object, stdout: bool) -> None:
         """
         Args:
             content (str): write `content` to file.
@@ -67,7 +67,7 @@ class LogFile:
         if self._is_write:
             self._file.flush()
 
-    def _clear(self) -> None:
+    def __clear(self) -> None:
         if not self._is_write:
             return
 
@@ -75,7 +75,7 @@ class LogFile:
             self._path.unlink()  # delete
         self._path.touch()  # create
 
-    def _is_stdout(self, stdout: Optional[bool]) -> bool:
+    def __is_stdout(self, stdout: Optional[bool]) -> bool:
         # priority `stdout` argument.
         return stdout if stdout is not None else self.stdout
 
@@ -174,9 +174,16 @@ def concat_path(
     return fp
 
 
-def check_existence(path: T._path_t) -> None:
-    if not is_exists(path):
-        raise FileNotFoundError(f"'{path}' does not exist.")
+def check_existence(path: Union[T._path_t, List[T._path_t]]) -> None:
+    def _inner(path: T._path_t):
+        if not is_exists(path):
+            raise FileNotFoundError(f"'{path}' does not exist.")
+
+    if isinstance(path, list):
+        for p in path:
+            _inner(p)
+    else:
+        _inner(path)
 
 
 def is_exists(path: T._path_t) -> bool:
@@ -272,6 +279,12 @@ def plot_confusion_matrix(
     plt.tight_layout()
     fig = plt.gcf()
     return fig
+
+
+def get_label(ans_label: Tensor, pred_label: Tensor) -> Tuple[int, int]:
+    ans = int(ans_label[0].item())
+    pred = int(torch.max(pred_label.data, 1)[1].item())
+    return ans, pred
 
 
 def num_flat_features(x: Tensor) -> int:
