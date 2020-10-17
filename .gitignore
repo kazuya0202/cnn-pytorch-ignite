@@ -5,7 +5,7 @@ logs/
 config/
 
 results/**/
-
+apex/
 
 ### Python
 

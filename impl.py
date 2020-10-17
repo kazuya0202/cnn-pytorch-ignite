@@ -18,6 +18,8 @@ from modules import torch_utils as tutils
 from modules import utils
 from modules.global_config import GlobalConfig
 
+from apex import amp
+
 
 @dataclass
 class Model:
@@ -25,6 +27,10 @@ class Model:
     optimizer: T._optim_t
     criterion: T._criterion_t
     device: torch.device
+
+    def __post_init__(self) -> None:
+        # self.net, self.optimizer = amp.initialize(self.net, self.optimizer, opt_level="O1")  # type: ignore
+        pass
 
 
 def train_step(
@@ -45,6 +51,9 @@ def train_step(
     ):
         y_pred = model.net(x)
         loss = model.criterion(y_pred, y) / iter_size
+        # with amp.scale_loss(loss, model.optimizer) as scaled_loss:
+        #     scaled_loss.backward()
+        #     total_loss += scaled_loss.item()
         loss.backward()
         total_loss += loss.item()
 

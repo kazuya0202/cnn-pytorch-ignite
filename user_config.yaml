@@ -1,17 +1,17 @@
 path:
-  dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
-  # dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
+  # dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
+  dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
   # dataset: "D:\\workspace\\repos\\github.com\\kazuya0202\\cnn-with-pytorch\\dataset\\Images"
   # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
   result_dir: "./results"
 
 dataset:
-  limit_size: 500
+  limit_size: -1
   valid_size: 0.1
   # ^^^^^^^^ this configs are only valid when `is_pre_splited` is false.
 
-  is_pre_splited: true
+  is_pre_splited: false
   train_dir: ""
   valid_dir: ""
   # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
@@ -49,8 +49,8 @@ network:
 
 option:
   is_show_network_difinition: true
-  is_save_log: false
+  is_save_log: true
   is_save_mistaken_pred: false
   is_save_config: false
   log_tensorboard: false
-  is_save_cm: false  # confusion matrix
+  is_save_cm: true  # confusion matrix
