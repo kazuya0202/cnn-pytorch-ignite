@@ -196,21 +196,21 @@ def save_model(model: Model, classes: List[str], gc: GlobalConfig, epoch: int):
     torch.save(save_cfg, path)
 
 
-def log_tensorboard(
+def attach_log_to_tensorboard(
     tb_logger: tbl.TensorboardLogger,
     trainer: Engine,
     _list: List[Tuple[Engine, DataLoader, str]],
     model: Model,
 ) -> None:
-    attach_num = 1
+    # attach_num = 1
 
-    tb_logger.attach_output_handler(
-        trainer,
-        event_name=Events.ITERATION_COMPLETED(every=attach_num),
-        tag="training",  # type: ignore
-        output_transform=lambda loss: {"batchloss": loss},  # type: ignore
-        metric_names="all",  # type: ignore
-    )
+    # tb_logger.attach_output_handler(
+    #     trainer,
+    #     event_name=Events.ITERATION_COMPLETED(every=attach_num),
+    #     tag="training",  # type: ignore
+    #     output_transform=lambda loss: {"batchloss": loss},  # type: ignore
+    #     metric_names="all",  # type: ignore
+    # )
 
     for evaluator, _, tag in _list:
         tb_logger.attach_output_handler(
@@ -221,33 +221,33 @@ def log_tensorboard(
             global_step_transform=tbl.global_step_from_engine(trainer),  # type: ignore
         )
 
-    tb_logger.attach_opt_params_handler(
-        trainer, event_name=Events.ITERATION_COMPLETED(every=attach_num), optimizer=model.optimizer  # type: ignore
-    )
+    # tb_logger.attach_opt_params_handler(
+    #     trainer, event_name=Events.ITERATION_COMPLETED(every=attach_num), optimizer=model.optimizer  # type: ignore
+    # )
 
-    tb_logger.attach(
-        trainer,
-        log_handler=tbl.WeightsScalarHandler(model.net),
-        event_name=Events.ITERATION_COMPLETED(every=attach_num),
-    )
+    # tb_logger.attach(
+    #     trainer,
+    #     log_handler=tbl.WeightsScalarHandler(model.net),
+    #     event_name=Events.ITERATION_COMPLETED(every=attach_num),
+    # )
 
-    tb_logger.attach(
-        trainer,
-        log_handler=tbl.WeightsHistHandler(model.net),
-        event_name=Events.EPOCH_COMPLETED(every=attach_num),
-    )
+    # tb_logger.attach(
+    #     trainer,
+    #     log_handler=tbl.WeightsHistHandler(model.net),
+    #     event_name=Events.EPOCH_COMPLETED(every=attach_num),
+    # )
 
-    tb_logger.attach(
-        trainer,
-        log_handler=tbl.GradsScalarHandler(model.net),
-        event_name=Events.ITERATION_COMPLETED(every=attach_num),
-    )
+    # tb_logger.attach(
+    #     trainer,
+    #     log_handler=tbl.GradsScalarHandler(model.net),
+    #     event_name=Events.ITERATION_COMPLETED(every=attach_num),
+    # )
 
-    tb_logger.attach(
-        trainer,
-        log_handler=tbl.GradsHistHandler(model.net),
-        event_name=Events.EPOCH_COMPLETED(every=attach_num),
-    )
+    # tb_logger.attach(
+    #     trainer,
+    #     log_handler=tbl.GradsHistHandler(model.net),
+    #     event_name=Events.EPOCH_COMPLETED(every=attach_num),
+    # )
 
 
 def show_network_difinition(

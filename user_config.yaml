@@ -4,6 +4,7 @@ path:
   # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
   result_dir: "./results"
+  tb_log_dir: "./runs"
 
 dataset:
   limit_size: -1
@@ -48,8 +49,8 @@ network:
 
 option:
   is_show_network_difinition: true
-  is_save_log: true
+  is_save_log: false
   is_save_mistaken_pred: false
   is_save_config: false
   log_tensorboard: false
-  is_save_cm: true  # confusion matrix
+  is_save_cm: false  # confusion matrix

@@ -122,8 +122,8 @@ def run() -> None:
     # tensorboard
     tb_logger = None
     if gc.option.log_tensorboard:
-        tb_logger = tbl.TensorboardLogger()
-        impl.log_tensorboard(tb_logger, trainer, collect_list, model)
+        tb_logger = tbl.TensorboardLogger(logdir=str(Path(gc.path.tb_log_dir, gc.filename_base)))
+        impl.attach_log_to_tensorboard(tb_logger, trainer, collect_list, model)
 
     # schedule
     valid_schedule = utils.create_schedule(gc.network.epoch, gc.network.valid_cycle)

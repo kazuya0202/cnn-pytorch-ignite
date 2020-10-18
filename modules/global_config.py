@@ -15,6 +15,7 @@ from . import T, utils
 class Path_:
     dataset: T._path_t = r"./dataset"
     result_dir: T._path_t = r"./results"
+    tb_log_dir: T._path_t = r"./runs"
 
     mistaken: Path = field(init=False)
     model: Path = field(init=False)
