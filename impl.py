@@ -281,7 +281,7 @@ def show_network_difinition(
     base_conf = {
         "run time": gc.filename_base,
         "dataset path": (
-            f"\n  train - {gc.dataset.train_dir}\n  valid - {gc.dataset.valid_dir}"
+            f"train - {gc.dataset.train_dir}\nvalid - {gc.dataset.valid_dir}"
             if gc.dataset.is_pre_splited
             else str(gc.path.dataset)
         ),
@@ -324,16 +324,19 @@ def show_network_difinition(
         "unknown dataset size": dataset.unknown_size,
         "known dataset size": dataset.known_size,
     }
-
     classes = {str(k): v for k, v in dataset.classes.items()}
 
+    collect_list = [
+        (classes, "--- Classes ---"),
+        (base_conf, "--- Base ---"),
+        (dataset_conf, "--- Dataset ---"),
+        (gradcam_conf, "--- Grad-CAM ---"),
+        (network_conf, "--- Network ---"),
+        (option_conf, "--- Option ---"),
+        (model_conf, "--- Model ---"),
+    ]
     print()
-    show_config(classes, "--- Classes ---")
-    show_config(base_conf, "--- Base ---")
-    show_config(dataset_conf, "--- Dataset ---")
-    show_config(gradcam_conf, "--- Grad-CAM ---")
-    show_config(network_conf, "--- Network ---")
-    show_config(option_conf, "--- Option ---")
-    show_config(model_conf, "--- Model ---")
+    for dict_, title in collect_list:
+        show_config(dict_, title)
 
     gc.logfile.flush()

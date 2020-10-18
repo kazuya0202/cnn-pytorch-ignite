@@ -99,12 +99,13 @@ class CreateDataset(Dataset):
 
     def __get_dataset_from_dir(self) -> None:
         r"""Get dataset from each directory."""
-        train_dirs = [x for x in Path(self.gc.dataset.train_dir).glob("*") if x.is_dir()]
-        valid_dirs = [x for x in Path(self.gc.dataset.valid_dir).glob("*") if x.is_dir()]
+        train_dirs = sorted([x for x in Path(self.gc.dataset.train_dir).glob("*") if x.is_dir()])
+        valid_dirs = sorted([x for x in Path(self.gc.dataset.valid_dir).glob("*") if x.is_dir()])
 
         for label_idx, (t_dir, v_dir) in enumerate(zip(train_dirs, valid_dirs)):
-            # if t_dir.name != v_dir.name:  # get images that exist in both directories.
-            #     continue
+            if t_dir.name != v_dir.name:  # get images that exist in both directories.
+                print(f"Different class name: 'train/{t_dir.name}' | 'valid/{v_dir.name}'")
+                continue
             train = self.__glob_data(t_dir, label_idx, shuffle=True)
             valid = self.__glob_data(v_dir, label_idx, shuffle=True)
 
@@ -116,7 +117,7 @@ class CreateDataset(Dataset):
         path = Path(self.gc.path.dataset)
 
         # directories in [image_path]
-        dirs = [x for x in path.glob("*") if x.is_dir()]
+        dirs = sorted([x for x in path.glob("*") if x.is_dir()])
 
         # all extensions / all sub directories
         for label_idx, dir_ in enumerate(dirs):

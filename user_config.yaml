@@ -1,7 +1,6 @@
 path:
   # dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
   dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
-  # dataset: "D:\\workspace\\repos\\github.com\\kazuya0202\\cnn-with-pytorch\\dataset\\Images"
   # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
   result_dir: "./results"
@@ -26,8 +25,8 @@ gradcam:
   layer: "conv5"
 
 network:
-  height: 60
-  width: 60
+  height: 64
+  width: 64
   channels: 3
 
   epoch: 5
