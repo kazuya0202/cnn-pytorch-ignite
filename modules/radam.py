@@ -47,8 +47,8 @@ class RAdam(Optimizer):
 
                 if len(state) == 0:
                     state['step'] = 0
-                    state['exp_avg'] = torch.zeros_like(p_data_fp32)
-                    state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)
+                    state['exp_avg'] = torch.zeros_like(p_data_fp32)  # type: ignore
+                    state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)  # type: ignore
                 else:
                     state['exp_avg'] = state['exp_avg'].type_as(p_data_fp32)
                     state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data_fp32)

@@ -18,8 +18,6 @@ from modules import torch_utils as tutils
 from modules import utils
 from modules.global_config import GlobalConfig
 
-from apex import amp
-
 
 @dataclass
 class Model:
@@ -27,10 +25,6 @@ class Model:
     optimizer: T._optim_t
     criterion: T._criterion_t
     device: torch.device
-
-    def __post_init__(self) -> None:
-        # self.net, self.optimizer = amp.initialize(self.net, self.optimizer, opt_level="O1")  # type: ignore
-        pass
 
 
 def train_step(
@@ -47,13 +41,10 @@ def train_step(
     total_loss = 0.0
 
     for (x, y), iter_size in utils.subdivide_batch(
-        minibatch.batch, model.device, subdivisions=subdivisions + 1, non_blocking=non_blocking
+        minibatch.batch, model.device, subdivisions, non_blocking=non_blocking
     ):
         y_pred = model.net(x)
         loss = model.criterion(y_pred, y) / iter_size
-        # with amp.scale_loss(loss, model.optimizer) as scaled_loss:
-        #     scaled_loss.backward()
-        #     total_loss += scaled_loss.item()
         loss.backward()
         total_loss += loss.item()
 
@@ -314,7 +305,7 @@ def show_network_difinition(
         "subdivisions": gc.network.subdivisions,
         "cycle of saving": gc.network.save_cycle,
         "cycle of validation": gc.network.valid_cycle,
-        "GPU available": torch.cuda.is_available(),
+        "GPU available": torch.cuda.is_available(),  # type: ignore
         "GPU used": gc.network.gpu_enabled,
         "saving final pth is": gc.network.is_save_final_model,
     }

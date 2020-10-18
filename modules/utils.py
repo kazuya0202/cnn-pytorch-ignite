@@ -118,7 +118,7 @@ class MyProgressBar(ProgressBar):
 
 
 def prepare_batch(
-    batch: T._batch_t, device: torch.device, non_blocking: bool = False,
+    batch: T._batch_t, device: torch.device, *, non_blocking: bool = False,
 ) -> T._batch_t:
     x, y = batch
     return (
@@ -128,7 +128,7 @@ def prepare_batch(
 
 
 def subdivide_batch(
-    batch: T._batch_t, device: torch.device, subdivisions: int, non_blocking: bool = False,
+    batch: T._batch_t, device: torch.device, subdivisions: int, *, non_blocking: bool = False,
 ) -> Iterator[Tuple[T._batch_t, int]]:
     x, y = batch
     batch_len = x.size()[0]
