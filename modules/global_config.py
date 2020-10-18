@@ -86,7 +86,7 @@ class Network_:
 
     def __post_init__(self) -> None:
         self.input_size = (self.height, self.width)
-        self.gpu_enabled = torch.cuda.is_available() and self.gpu_enabled
+        self.gpu_enabled = torch.cuda.is_available() and self.gpu_enabled  # type: ignore
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
 
         self.net_ = eval(f"cnn.{self.net_name}")
@@ -135,7 +135,7 @@ class GlobalConfig:
         self.network = create_instance(Network_, "network")
         self.option = create_instance(Option_, "option")
 
-        self.filename_base = datetime.now().strftime("%Y%b%d_%Hh%Mm%Ss")
+        self.filename_base = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.logfile = utils.LogFile(stdout=False)
         self.ratefile = utils.LogFile(stdout=False)
 
