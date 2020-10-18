@@ -136,7 +136,7 @@ class GlobalConfig:
         self.network = create_instance(Network_, "network")
         self.option = create_instance(Option_, "option")
 
-        self.filename_base = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.filename_base = datetime.now().strftime("%Y-%m-%d_%Hh%Mm%Ss")
         self.logfile = utils.LogFile(stdout=False)
         self.ratefile = utils.LogFile(stdout=False)
 
