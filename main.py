@@ -115,8 +115,8 @@ def run() -> None:
     pbar.attach(trainer, metric_names="all")
 
     collect_list = [
-        (unknown_evaluator, unknown_loader, State.UNKNOWN_VALID),
         (known_evaluator, known_loader, State.KNOWN_VALID),
+        (unknown_evaluator, unknown_loader, State.UNKNOWN_VALID),
     ]
 
     # tensorboard
