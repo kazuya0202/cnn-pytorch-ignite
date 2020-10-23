@@ -32,7 +32,6 @@ class Path_:
 @dataclass
 class Dataset_:
     limit_size: Optional[int] = -1
-
     valid_size: Union[int, float] = 0.1
 
     is_pre_splited: bool = False
@@ -49,8 +48,9 @@ class Dataset_:
         if not self.extensions:
             self.extensions = ["jpg", "png", "jpeg", "bmp"]
 
-        self.train_dir = utils.replace_backslash(self.train_dir)
-        self.valid_dir = utils.replace_backslash(self.valid_dir)
+        if self.is_pre_splited:
+            self.train_dir = utils.replace_backslash(self.train_dir)
+            self.valid_dir = utils.replace_backslash(self.valid_dir)
 
 
 @dataclass
