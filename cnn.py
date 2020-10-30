@@ -139,7 +139,7 @@ class LightNet(nn.Module):
 
     def forward(self, x: Tensor) -> torch.Tensor:
         x = self.features(x)
-        x = x.view(x.size()[0], -1)
+        x = x.view(x.size(0), -1)
         x = self.classifier(x)
 
         # don't run `softmax()` because of softmax process in CrossEntropyLoss
@@ -157,10 +157,8 @@ def num_flat_features(x: Tensor) -> int:
 
 
 def calc_linear_in_features(
-    # prev_out_channel: int,
     features: dict,
     input_size: Tuple[int, int],
-    # named_modules: Iterator[Tuple[str, nn.Module]],
 ) -> int:
     # out_channels of  last conv.
     prev_out_channel = [
@@ -181,25 +179,3 @@ def calc_linear_in_features(
             w = _calc_out_shape(target=w, module=x, idx=1)
 
     return h * w * prev_out_channel
-
-    # coef = 1
-    # # calc coefficient.
-    # for phase, x in named_modules:
-    #     if phase.find("pool") > -1:
-    #         coef *= int(x.kernel_size)  # type: ignore
-
-    # return (input_size[0] // coef) * (input_size[1] // coef) * prev_out_channel
-
-
-# def calc_linear_in_features(
-#     prev_out_channel: int,
-#     input_size: Tuple[int, int],
-#     named_modules: Iterator[Tuple[str, nn.Module]],
-# ) -> int:
-#     coef = 1
-#     # calc coefficient.
-#     for phase, x in named_modules:
-#         if phase.find("pool") > -1:
-#             coef *= int(x.kernel_size)  # type: ignore
-
-#     return (input_size[0] // coef) * (input_size[1] // coef) * prev_out_channel

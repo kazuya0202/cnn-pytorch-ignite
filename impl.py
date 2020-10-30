@@ -46,15 +46,12 @@ def train_step(
         y_pred = model.net(x)
         loss = model.criterion(y_pred, y) / iter_size
         loss.backward()
-        total_loss += loss.item()
 
         # save mistaken predicted image
-        if not is_save_mistaken_pred:
-            continue
-
-        ans, pred = utils.get_label(y, y_pred)
-        if ans != pred:
-            save_image(x, str(minibatch.path))
+        if is_save_mistaken_pred:
+            ans, pred = utils.get_label(y, y_pred)
+            if ans != pred:
+                save_image(x, str(minibatch.path))
 
     model.optimizer.step()
     return total_loss / subdivisions
@@ -178,6 +175,8 @@ def execute_gradcam(
         for i, img in enumerate(data_list):
             is_png = name == "gbp"
             ext = "png" if is_png else "jpg"
+            if is_png:
+                continue
 
             s = f"{iteration}_{gcam.classes[i]}_{name}_pred[{pred}]_correct[{ans}].{ext}"
             path_ = base_dir.joinpath(s)
@@ -298,6 +297,7 @@ def show_network_difinition(
         "Grad-CAM is": gc.gradcam.enabled,
         "Grad-CAM execute only mistaken": gc.gradcam.only_mistaken,
         "Grad-CAM layer": gc.gradcam.layer,
+        "Grad-CAM cycle": gc.gradcam.cycle,
     }
     network_conf = {
         "input size": f"(h: {gc.network.height}, w: {gc.network.width})",

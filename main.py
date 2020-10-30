@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
+import torch
 import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
@@ -25,6 +26,8 @@ def run() -> None:
     transform = Compose(
         [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
+    if gc.network.gpu_enabled:
+        torch.backends.cudnn.enabled = True  # type: ignore
 
     if gc.dataset.is_pre_splited:
         utils.check_existence([gc.dataset.train_dir, gc.dataset.valid_dir])
