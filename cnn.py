@@ -1,6 +1,5 @@
 from collections import OrderedDict
-from typing import Dict, Iterator, Tuple, Union
-from dataclasses import dataclass, field
+from typing import Dict, Tuple
 
 import torch
 import torch.nn as nn
@@ -23,14 +22,12 @@ class Net(nn.Module):
                 ("relu1", nutils.ReLU_(inplace=True).module),
                 ("bn1", nutils.BatchNorm_(96).module),
                 ("pool1", nutils.MaxPool_(2, stride=2).module),
-
                 # ("conv2", nutils.Conv_(96, 128, kernel_size=5, stride=1, padding=2).module),
                 ("conv2", nutils.Conv_(96, 128, kernel_size=5, stride=1, padding=1).module),
                 ("relu2", nutils.ReLU_(inplace=True).module),
                 ("bn2", nutils.BatchNorm_(128).module),
                 # ("pool1", nutils.MaxPool_(2, stride=2).module),
                 ("pool2", nutils.MaxPool_(2, stride=2).module),
-
                 ("conv3", nutils.Conv_(128, 256, kernel_size=3, stride=1, padding=1).module),
                 # ("relu3", nutils.ReLU_(inplace=True).module),
                 ("conv4", nutils.Conv_(256, 384, kernel_size=3, stride=1, padding=1).module),
@@ -41,11 +38,9 @@ class Net(nn.Module):
             ]
         )
 
-        in_features = calc_linear_in_features(features, input_size)
-
         classifier: Dict[str, nn.Module] = OrderedDict(
             [
-                ("fc1", nutils.Linear_(in_features, 2048).module),
+                ("fc1", nutils.Linear_(calc_linear_in_features(features, input_size), 2048).module),
                 ("relu1", nutils.ReLU_(inplace=True).module),
                 ("fc2", nutils.Linear_(2048, 512).module),
                 ("relu2", nutils.ReLU_(inplace=True).module),
@@ -93,7 +88,7 @@ class Net(nn.Module):
 
     def forward(self, x) -> torch.Tensor:
         x = self.features(x)
-        x = x.view(x.size()[0], -1)
+        x = x.view(x.size(0), -1)
         x = self.classifier(x)
 
         # don't run `softmax()` because of softmax process in CrossEntropyLoss
@@ -167,13 +162,10 @@ def calc_linear_in_features(
     input_size: Tuple[int, int],
     # named_modules: Iterator[Tuple[str, nn.Module]],
 ) -> int:
-    # find last conv.
-    prev_out_channel: int = 1
-    for layer in sorted(features.keys()):
-        if layer.find("conv") > -1:
-            prev_out_channel = features[layer].out_channels  # type: ignore
-            break
-
+    # out_channels of  last conv.
+    prev_out_channel = [
+        module.out_channels for layer, module in features.items() if layer.find("conv") > -1
+    ][-1]
     h, w = input_size
 
     def _calc_out_shape(target: int, module: nn.Module, idx: int) -> int:
