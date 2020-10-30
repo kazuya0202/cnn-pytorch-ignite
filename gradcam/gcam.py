@@ -1,6 +1,6 @@
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import matplotlib.cm as mpl_cm
 import numpy as np
@@ -122,6 +122,7 @@ class ExecuteGradCAM:
     input_size: Tuple[int, int]
     target_layer: str
     device: torch.device
+    schedule: List[bool]
     is_gradcam: bool = True
 
     @torch.enable_grad()

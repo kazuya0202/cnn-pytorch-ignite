@@ -58,6 +58,7 @@ class Gradcam_:
     enabled: bool = False
     only_mistaken: bool = True
     layer: str = "conv5"
+    cycle: int = 10
 
 
 @dataclass

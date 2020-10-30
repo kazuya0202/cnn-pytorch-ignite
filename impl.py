@@ -77,7 +77,8 @@ def validation_step(
         y_pred = model.net(x)
 
         ans, pred = utils.get_label(y, y_pred)
-        execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
+        if gcam.schedule[engine.state.epoch]:
+            execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
 
         return y_pred, y
 
@@ -156,7 +157,8 @@ def execute_gradcam(
 ) -> None:
     # do not execute / execute only mistaken
     is_correct = ans == pred
-    if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and is_correct)]):
+    # if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and is_correct)]):
+    if gc.gradcam.only_mistaken and is_correct:
         return
     epoch = engine.state.epoch
     iteration = engine.state.iteration

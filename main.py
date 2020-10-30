@@ -7,6 +7,7 @@ import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
+
 # from ignite.metrics.running_average import RunningAverage
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
@@ -50,7 +51,10 @@ def run() -> None:
     print(f"Building network by '{gc.network.net_.__name__}'...")
     net = gc.network.net_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
     model = impl.Model(
-        net, optimizer=gc.network.optim_(net.parameters()), criterion=nn.CrossEntropyLoss(), device=device,
+        net,
+        optimizer=gc.network.optim_(net.parameters()),
+        criterion=nn.CrossEntropyLoss(),
+        device=device,
     )
     del net
 
@@ -69,11 +73,18 @@ def run() -> None:
     # netword difinition
     impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
 
+    # grad cam
+    gcam_schedule = (
+        utils.create_schedule(gc.network.epoch, gc.gradcam.cycle)
+        if gc.gradcam.enabled
+        else [False] * gc.network.epoch
+    )
     gcam = ExecuteGradCAM(
         classes,
         input_size=gc.network.input_size,
         target_layer=gc.gradcam.layer,
         device=device,
+        schedule=gcam_schedule,
         is_gradcam=gc.gradcam.enabled,
     )
 
