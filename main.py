@@ -25,6 +25,7 @@ from modules.global_config import GlobalConfig
 def run() -> None:
     transform = Compose(
         [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        # [Resize(gc.network.input_size), ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))]
     )
     cudnn.benchmark = True
 
@@ -81,37 +82,39 @@ def run() -> None:
     )
 
     scaler = torch.cuda.amp.GradScaler() if gc.network.amp else None  # type: ignore
+    # function of save mistaken image.
+    save_mistaken_img_fn = (
+        impl.save_mistaken_image if gc.option.is_save_mistaken_pred else impl.no_save_mistaken_image
+    )
 
     def train_step(engine: Engine, batch: T._batch_path):
-        minibatch = tutils.MiniBatch(batch)
         return impl.train_step(
-            minibatch,
+            tutils.MiniBatch(batch),
             model,
             subdivisions=gc.network.subdivisions,
-            is_save_mistaken_pred=gc.option.is_save_mistaken_pred,
+            save_img_fn=save_mistaken_img_fn,
             non_blocking=True,
         )
 
     def train_step_with_amp(engine: Engine, batch: T._batch_path):
-        minibatch = tutils.MiniBatch(batch)
         return impl.train_step_with_amp(
-            minibatch,
+            tutils.MiniBatch(batch),
             model,
             scaler,
             subdivisions=gc.network.subdivisions,
-            is_save_mistaken_pred=gc.option.is_save_mistaken_pred,
+            save_img_fn=save_mistaken_img_fn,
             non_blocking=True,
         )
 
     def unknown_validation_step(engine: Engine, batch: T._batch_path):
-        minibatch = tutils.MiniBatch(batch)
         return impl.validation_step(
-            engine, minibatch, model, gc, gcam, "unknown", non_blocking=True
+            engine, tutils.MiniBatch(batch), model, gc, gcam, "unknown", non_blocking=True
         )
 
     def known_validation_step(engine: Engine, batch: T._batch_path):
-        minibatch = tutils.MiniBatch(batch)
-        return impl.validation_step(engine, minibatch, model, gc, gcam, "known", non_blocking=True)
+        return impl.validation_step(
+            engine, tutils.MiniBatch(batch), model, gc, gcam, "known", non_blocking=True
+        )
 
     # trainer / evaluator
     trainer = Engine(train_step) if not gc.network.amp else Engine(train_step_with_amp)

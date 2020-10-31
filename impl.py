@@ -9,6 +9,7 @@ import tqdm
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from PIL import Image
+from torch.tensor import Tensor
 from torch.utils.data.dataloader import DataLoader
 from torchvision.utils import save_image
 
@@ -27,33 +28,39 @@ class Model:
     device: torch.device
 
 
+def save_mistaken_image(self, batch: T._batch, y_pred: Tensor, path: str) -> None:
+    x, y = batch
+    ans, pred = utils.get_label(y, y_pred)
+    if ans != pred:
+        save_image(x, path)
+
+
+def no_save_mistaken_image(batch: T._batch, y_pred: Tensor, path: str) -> None:
+    return
+
+
 def train_step(
     minibatch: tutils.MiniBatch,
     model: Model,
     subdivisions: int,
     *,
-    is_save_mistaken_pred: bool = False,
+    save_img_fn: Any = no_save_mistaken_image,
     non_blocking: bool = True,
 ):
     model.net.train()
     model.optimizer.zero_grad()
-
     total_loss = 0.0
 
-    for (x, y), iter_size in utils.subdivide_batch(
+    for x, y in utils.subdivide_batch(
         minibatch.batch, model.device, subdivisions, non_blocking=non_blocking
     ):
         y_pred = model.net(x)
-        loss = model.criterion(y_pred, y) / iter_size
+        loss = model.criterion(y_pred, y)
         loss.backward()
         total_loss += float(loss)
 
         # save mistaken predicted image
-        if is_save_mistaken_pred:
-            ans, pred = utils.get_label(y, y_pred)
-            if ans != pred:
-                save_image(x, str(minibatch.path))
-
+        save_img_fn((x, y), y_pred, str(minibatch.path))
     model.optimizer.step()
     return total_loss / subdivisions
 
@@ -64,31 +71,24 @@ def train_step_with_amp(
     scaler: torch.cuda.amp.GradScaler,  # type: ignore
     subdivisions: int,
     *,
-    is_save_mistaken_pred: bool = False,
+    save_img_fn: Any = no_save_mistaken_image,
     non_blocking: bool = True,
 ):
     model.net.train()
     model.optimizer.zero_grad()
-
     total_loss = 0.0
 
-    for (x, y), iter_size in utils.subdivide_batch(
+    for x, y in utils.subdivide_batch(
         minibatch.batch, model.device, subdivisions, non_blocking=non_blocking
     ):
-        y_pred = model.net(x)
         with torch.cuda.amp.autocast():  # type: ignore
-            loss = model.criterion(y_pred, y) / iter_size
+            y_pred = model.net(x)
+            loss = model.criterion(y_pred, y)
         scaler.scale(loss).backward()
-        # loss.backward()
         total_loss += float(loss)
 
         # save mistaken predicted image
-        if is_save_mistaken_pred:
-            ans, pred = utils.get_label(y, y_pred)
-            if ans != pred:
-                save_image(x, str(minibatch.path))
-
-    # model.optimizer.step()
+        save_img_fn((x, y), y_pred, str(minibatch.path))
     scaler.step(model.optimizer)
     scaler.update()
     return total_loss / subdivisions
@@ -110,11 +110,10 @@ def validation_step(
         x, y = utils.prepare_batch(minibatch.batch, model.device, non_blocking=non_blocking)
         y_pred = model.net(x)
 
-        ans, pred = utils.get_label(y, y_pred)
-        if gcam.schedule[engine.state.epoch]:
-            execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
-
-        return y_pred, y
+    ans, pred = utils.get_label(y, y_pred)
+    if gcam.schedule[engine.state.epoch - 1]:
+        execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
+    return y_pred, y
 
 
 def validate_model(
@@ -206,21 +205,22 @@ def execute_gradcam(
     )
 
     ret = gcam.main(model.net, str(path))
+    ret.pop("gbp")  # ignore gbp, now
     pbar = tqdm.tqdm(ret.items(), desc="Grad-CAM", leave=False)
 
     for name, data_list in pbar:  # name: "gcam", "gbp" ...
         for i, img in enumerate(data_list):
-            is_png = name == "gbp"
-            ext = "png" if is_png else "jpg"
-            if is_png:
-                continue
+            # is_png = name == "gbp"
+            # ext = "png" if is_png else "jpg"
+            ext = "jpg"
 
             s = f"{iteration}_{gcam.classes[i]}_{name}_pred[{pred}]_correct[{ans}].{ext}"
             path_ = base_dir.joinpath(s)
 
             if isinstance(img, np.ndarray):
                 img = Image.fromarray(img)
-            img = img.convert("RGBA" if is_png else "RGB")
+            # img = img.convert("RGBA" if is_png else "RGB")
+            img = img.convert("RGB")
             img.save(str(path_))
             # print(path_)
     del ret
@@ -319,8 +319,8 @@ def show_network_difinition(
     base_conf = {
         "run time": gc.filename_base,
         "dataset path": (
-            f"train - {gc.dataset.train_dir}\nvalid - {gc.dataset.valid_dir}"
-            if gc.dataset.is_pre_splited
+            f"train - {gc.path.train_dir}\nvalid - {gc.path.valid_dir}"
+            if gc.path.is_pre_splited
             else str(gc.path.dataset)
         ),
         "result path": gc.path.result_dir,
@@ -347,6 +347,7 @@ def show_network_difinition(
         "GPU available": torch.cuda.is_available(),  # type: ignore
         "GPU used": gc.network.gpu_enabled,
         "saving final pth is": gc.network.is_save_final_model,
+        "amp enabled": gc.network.amp,
     }
     option_conf = {
         "saving mistaken prediction is": gc.option.is_save_mistaken_pred,

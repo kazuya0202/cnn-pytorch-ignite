@@ -71,7 +71,7 @@ class CreateDataset(Dataset):
         self.classes = {}
 
         # collect images for dataset
-        if self.gc.dataset.is_pre_splited:
+        if self.gc.path.is_pre_splited:
             self.__get_dataset_from_dir()
         else:
             self.__get_dataset()
@@ -105,8 +105,8 @@ class CreateDataset(Dataset):
 
     def __get_dataset_from_dir(self) -> None:
         r"""Get dataset from each directory."""
-        train_dirs = sorted([x for x in Path(self.gc.dataset.train_dir).glob("*") if x.is_dir()])
-        valid_dirs = sorted([x for x in Path(self.gc.dataset.valid_dir).glob("*") if x.is_dir()])
+        train_dirs = sorted([x for x in Path(self.gc.path.train_dir).glob("*") if x.is_dir()])
+        valid_dirs = sorted([x for x in Path(self.gc.path.valid_dir).glob("*") if x.is_dir()])
 
         for label_idx, (t_dir, v_dir) in enumerate(zip(train_dirs, valid_dirs)):
             if t_dir.name != v_dir.name:  # get images that exist in both directories.

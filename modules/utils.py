@@ -1,7 +1,7 @@
 import itertools
+import os
 from dataclasses import dataclass, field
 from io import TextIOWrapper
-import os
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 
@@ -128,8 +128,13 @@ def prepare_batch(
 
 
 def subdivide_batch(
-    batch: T._batch, device: torch.device, subdivisions: int, *, non_blocking: bool = False,
-) -> Iterator[Tuple[T._batch, int]]:
+    batch: T._batch,
+    device: torch.device,
+    subdivisions: int,
+    *,
+    non_blocking: bool = False,
+    # ) -> Iterator[Tuple[T._batch, int]]:
+) -> Iterator[T._batch]:
     x, y = batch
     batch_len = x.size()[0]
     sep = np.linspace(start=0, stop=batch_len, num=subdivisions + 1, dtype=np.int)
@@ -138,7 +143,8 @@ def subdivide_batch(
         batch = (x[n:m], y[n:m])
         if batch[0].size()[0] == 0:
             continue
-        yield prepare_batch(batch, device, non_blocking=non_blocking), m - n
+        # yield prepare_batch(batch, device, non_blocking=non_blocking), m - n
+        yield prepare_batch(batch, device, non_blocking=non_blocking)
 
 
 def attach_metrics(evaluator: Engine, metrics: Dict[str, Any]) -> None:
@@ -155,9 +161,7 @@ def create_schedule(max_epoch: int, cycle: int) -> List[bool]:
     return [*_, True]
 
 
-def create_filepath(
-    dir_: T._path, name: str, is_prefix_seq: bool = False, ext: str = "txt"
-) -> str:
+def create_filepath(dir_: T._path, name: str, is_prefix_seq: bool = False, ext: str = "txt") -> str:
     if isinstance(dir_, str):
         dir_ = Path(dir_)
     prefix = "" if not is_prefix_seq else f"{len([x for x in dir_.glob(f'*.{ext}')])}_"
@@ -283,13 +287,5 @@ def plot_confusion_matrix(
 
 def get_label(ans_label: Tensor, pred_label: Tensor) -> Tuple[int, int]:
     ans = int(ans_label[0].item())
-    pred = int(torch.max(pred_label.data, 1)[1].item())
+    pred = int(torch.max(pred_label.data, 1)[1].item())  # type: ignore
     return ans, pred
-
-
-def num_flat_features(x: Tensor) -> int:
-    size = x.size()[1:]  # all dimensions except the batch dimension
-    num_features = 1
-    for s in size:
-        num_features *= s
-    return num_features

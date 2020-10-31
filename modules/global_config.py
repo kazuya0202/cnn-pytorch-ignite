@@ -17,6 +17,10 @@ class Path_:
     result_dir: T._path = r"./results"
     tb_log_dir: T._path = r"./runs"
 
+    is_pre_splited: bool = False
+    train_dir: T._path = r"./dataset/train"
+    valid_dir: T._path = r"./dataset/valid"
+
     mistaken: Path = field(init=False)
     model: Path = field(init=False)
     config: Path = field(init=False)
@@ -28,15 +32,15 @@ class Path_:
         self.dataset = utils.replace_backslash(self.dataset)
         self.result_dir = utils.replace_backslash(self.result_dir)
 
+        if self.is_pre_splited:
+            self.train_dir = utils.replace_backslash(self.train_dir)
+            self.valid_dir = utils.replace_backslash(self.valid_dir)
+
 
 @dataclass
 class Dataset_:
     limit_size: Optional[int] = -1
     valid_size: Union[int, float] = 0.1
-
-    is_pre_splited: bool = False
-    train_dir: T._path = r"./dataset/train"
-    valid_dir: T._path = r"./dataset/valid"
 
     is_shuffle_per_epoch: bool = True
     extensions: List[str] = field(default_factory=list)
@@ -47,10 +51,6 @@ class Dataset_:
 
         if not self.extensions:
             self.extensions = ["jpg", "png", "jpeg", "bmp"]
-
-        if self.is_pre_splited:
-            self.train_dir = utils.replace_backslash(self.train_dir)
-            self.valid_dir = utils.replace_backslash(self.valid_dir)
 
 
 @dataclass
@@ -84,7 +84,6 @@ class Network_:
     optim_: T._type_optim = optim.Adam
 
     amp: bool = True
-    # fp16: bool = True
 
     input_size: Tuple[int, int] = field(init=False)  # height, width
     device: torch.device = field(init=False)
@@ -169,12 +168,12 @@ class GlobalConfig:
             self.path.log.mkdir(parents=True, exist_ok=True)
 
     def check_dataset_path(self, is_show: bool = True) -> None:
-        if self.dataset.is_pre_splited:
-            utils.check_existence([self.dataset.train_dir, self.dataset.valid_dir])
+        if self.path.is_pre_splited:
+            utils.check_existence([self.path.train_dir, self.path.valid_dir])
             if is_show:
                 print(f"Creating dataset from")
-                print(f"  train - '{self.dataset.train_dir}'")
-                print(f"  valid - '{self.dataset.valid_dir}'...")
+                print(f"  train - '{self.path.train_dir}'")
+                print(f"  valid - '{self.path.valid_dir}'...")
         else:
             utils.check_existence(self.path.dataset)
             if is_show:

@@ -36,7 +36,7 @@ class ValidModel:
     classify_size: int = field(init=False)
 
     def __post_init__(self) -> None:
-        self.gpu_enabled = self.gpu_enabled and torch.cuda.is_available()
+        self.gpu_enabled = self.gpu_enabled and torch.cuda.is_available()  # type: ignore
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
         self.__load(self.tc.model)
 
@@ -80,7 +80,7 @@ class ValidModel:
 
             x: Tensor = self.net(img)
             x_sm = F.softmax(x, -1)
-            pred = torch.max(x_sm.data, 1)
+            pred = torch.max(x_sm.data, 1)  # type: ignore
 
             label = int(pred[1].item())
             return Predict(

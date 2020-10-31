@@ -1,10 +1,11 @@
 import copy
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.cm as mpl_cm
 import numpy as np
 import torch
+import torch.nn as nn
 from modules import T
 from PIL import Image
 from torch import Tensor
@@ -23,7 +24,7 @@ class Extractor:
     def forward_pass_on_conv(self, x: Tensor):
         conv_output = None
         layer: str
-        module: torch.nn.Module
+        module: nn.Module
         for layer, module in self.model.features._modules.items():  # type: ignore
             x = module(x)
             if layer == self.target_layer:
@@ -55,7 +56,7 @@ class GradCAM:
         if target_cls is None:
             target_cls = np.argmax(model_output.detach().cpu().numpy())
 
-        one_hot = torch.zeros(size=(1, model_output.size()[-1])).to(device)
+        one_hot = torch.zeros(size=(1, model_output.size()[-1])).to(device)  # type: ignore
         one_hot[0][target_cls] = 1
 
         self.model.features.zero_grad()  # type: ignore

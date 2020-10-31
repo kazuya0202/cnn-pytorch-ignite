@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from typing import OrderedDict as OrderedDictType
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -11,8 +12,8 @@ from modules import net_utils as nutils
 
 @dataclass(init=False, repr=False, eq=False, unsafe_hash=False)
 class BaseNetUtility:
-    features_dict: OrderedDict = field(init=False)
-    classifier_dict: OrderedDict = field(init=False)
+    features_dict: OrderedDictType[str, nn.Module] = field(init=False)
+    classifier_dict: OrderedDictType[str, nn.Module] = field(init=False)
 
     features: nn.Sequential = field(init=False)
     classifier: nn.Sequential = field(init=False)
@@ -21,19 +22,6 @@ class BaseNetUtility:
         self.features = nn.Sequential(self.features_dict)
         self.classifier = nn.Sequential(self.classifier_dict)
 
-    # def set_bias_false_before_bn_layer(self) -> None:
-    #     layers = [layer.find("bn") > -1 for layer in self.features_dict.keys()]
-    #     # for i, layer in enumerate(self.features_dict.keys()):
-    #     #     if layer.find("bn") > -1:
-    #     #         idxs.append(i)
-    #     for layer, i in zip(self.features_dict.keys(), range(len(layers))):
-    #         if i == 0:
-    #             continue
-    #         if layers[i-2]:
-    #             print(layer)
-    #         print(i)
-    #     exit()
-
     def calc_linear_in_features(
         self,
         # features: dict,
@@ -41,7 +29,7 @@ class BaseNetUtility:
     ) -> int:
         # out_channels of  last conv.
         prev_out_channel = [
-            module.out_channels
+            int(module.out_channels.item())
             for layer, module in self.features_dict.items()
             if layer.find("conv") > -1
         ][-1]
@@ -69,7 +57,7 @@ class Net(nn.Module, BaseNetUtility):
         super(Net, self).__init__()
 
         # network definiiton
-        self.features_dict: Dict[str, nn.Module] = OrderedDict(
+        self.features_dict = OrderedDict(
             [
                 # ("conv1", nutils.Conv_(in_channels, 96, kernel_size=7, stride=1, padding=3).module),
                 ("conv1", nutils.Conv_(in_channels, 96, kernel_size=7, stride=1, padding=1).module),
@@ -91,7 +79,6 @@ class Net(nn.Module, BaseNetUtility):
                 # ("pool2", nutils.MaxPool_(2, stride=2).module),
             ]
         )
-
         self.classifier_dict: Dict[str, nn.Module] = OrderedDict(
             [
                 ("fc1", nutils.Linear_(self.calc_linear_in_features(input_size), 2048).module),
@@ -104,106 +91,50 @@ class Net(nn.Module, BaseNetUtility):
 
         self.make_sequential()
 
-        # self.features = nn.Sequential(
-        #     OrderedDict(
-        #         [
-        #             ("conv1", nn.Conv2d(in_channels, 96, kernel_size=7, stride=1, padding=3)),
-        #             ("relu1", nn.ReLU(inplace=True)),
-        #             ("bn1", nn.BatchNorm2d(96)),
-        #             ("conv2", nn.Conv2d(96, 128, kernel_size=5, stride=1, padding=2)),
-        #             ("relu2", nn.ReLU(inplace=True)),
-        #             ("bn2", nn.BatchNorm2d(128)),
-        #             ("pool1", nn.MaxPool2d(2)),
-        #             ("conv3", nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)),
-        #             ("relu3", nn.ReLU(inplace=True)),
-        #             ("conv4", nn.Conv2d(256, 384, kernel_size=3, stride=1, padding=1)),
-        #             ("relu4", nn.ReLU(inplace=True)),
-        #             ("conv5", nn.Conv2d(384, 256, kernel_size=3, stride=1, padding=1)),
-        #             ("relu5", nn.ReLU(inplace=True)),
-        #             ("pool2", nn.MaxPool2d(2)),
-        #         ]
-        #     )
-        # )
-
-        # in_features = calc_linear_in_features(256, input_size, self.features.named_modules())
-
-        # self.classifier = nn.Sequential(
-        #     OrderedDict(
-        #         [
-        #             ("fc1", nn.Linear(in_features, 2048)),
-        #             ("relu1", nn.ReLU(inplace=True)),
-        #             ("fc2", nn.Linear(2048, 512)),
-        #             ("relu2", nn.ReLU(inplace=True)),
-        #             ("fc3", nn.Linear(512, classify_size)),
-        #         ]
-        #     )
-        # )
-
     def forward(self, x) -> torch.Tensor:
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
-
-        # don't run `softmax()` because of softmax process in CrossEntropyLoss
-        # x = F.softmax(x)
         return x
 
 
-class LightNet(nn.Module):
+class LightNet(nn.Module, BaseNetUtility):
     def __init__(
         self, input_size: Tuple[int, int] = (60, 60), classify_size: int = 3, in_channels: int = 3
     ) -> None:
         super(LightNet, self).__init__()
 
-        self.features = nn.Sequential(
-            OrderedDict(
-                [
-                    ("conv1", nn.Conv2d(in_channels, 48, kernel_size=7, stride=1, padding=3)),
-                    ("relu1", nn.ReLU(inplace=True)),
-                    ("bn1", nn.BatchNorm2d(48)),
-                    ("conv2", nn.Conv2d(48, 96, kernel_size=5, stride=1, padding=2)),
-                    ("relu2", nn.ReLU(inplace=True)),
-                    ("bn2", nn.BatchNorm2d(96)),
-                    ("pool1", nn.MaxPool2d(2)),
-                    ("conv3", nn.Conv2d(96, 128, kernel_size=3, stride=1, padding=1)),
-                    ("relu3", nn.ReLU(inplace=True)),
-                    ("conv4", nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1)),
-                    ("relu4", nn.ReLU(inplace=True)),
-                    ("conv5", nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1)),
-                    ("relu5", nn.ReLU(inplace=True)),
-                    ("pool2", nn.MaxPool2d(2)),
-                ]
-            )
+        self.features_dict = OrderedDict(
+            [
+                ("conv1", nutils.Conv_(in_channels, 48, kernel_size=7, stride=1, padding=3).module),
+                ("relu1", nutils.ReLU_(inplace=True).module),
+                ("bn1", nutils.BatchNorm_(48).module),
+                ("conv2", nutils.Conv_(48, 96, kernel_size=5, stride=1, padding=2).module),
+                ("relu2", nutils.ReLU_(inplace=True).module),
+                ("bn2", nutils.BatchNorm_(96).module),
+                ("pool1", nutils.MaxPool_(2).module),
+                ("conv3", nutils.Conv_(96, 128, kernel_size=3, stride=1, padding=1).module),
+                ("relu3", nutils.ReLU_(inplace=True).module),
+                ("conv4", nutils.Conv_(128, 256, kernel_size=3, stride=1, padding=1).module),
+                ("relu4", nutils.ReLU_(inplace=True).module),
+                ("conv5", nutils.Conv_(256, 128, kernel_size=3, stride=1, padding=1).module),
+                ("relu5", nutils.ReLU_(inplace=True).module),
+                ("pool2", nutils.MaxPool_(2).module),
+            ]
         )
-
-        in_features = calc_linear_in_features(128, input_size, self.features.named_modules())
-
-        self.classifier = nn.Sequential(
-            OrderedDict(
-                [
-                    ("fc1", nn.Linear(in_features, 2048)),
-                    ("relu1", nn.ReLU(inplace=True)),
-                    ("fc2", nn.Linear(2048, 512)),
-                    ("relu2", nn.ReLU(inplace=True)),
-                    ("fc3", nn.Linear(512, classify_size)),
-                ]
-            )
+        self.classifier_dict = OrderedDict(
+            [
+                ("fc1", nutils.Linear_(self.calc_linear_in_features(input_size), 2048).module),
+                ("relu1", nutils.ReLU_(inplace=True).module),
+                ("fc2", nutils.Linear_(2048, 512).module),
+                ("relu2", nutils.ReLU_(inplace=True).module),
+                ("fc3", nutils.Linear_(512, classify_size).module),
+            ]
         )
+        self.make_sequential()
 
     def forward(self, x: Tensor) -> torch.Tensor:
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.classifier(x)
-
-        # don't run `softmax()` because of softmax process in CrossEntropyLoss
-        # x = F.softmax(x)
-
         return x
-
-
-def num_flat_features(x: Tensor) -> int:
-    size = x.size()[1:]  # all dimensions except the batch dimension
-    num_features = 1
-    for s in size:
-        num_features *= s
-    return num_features

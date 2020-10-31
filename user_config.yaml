@@ -3,6 +3,11 @@ path:
   dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
   # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
 
+  is_pre_splited: false
+  train_dir: ""
+  valid_dir: ""
+  # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
+
   result_dir: "./results"
   tb_log_dir: "./runs"
 
@@ -10,11 +15,6 @@ dataset:
   limit_size: -1
   valid_size: 0.1
   # ^^^^^^^^ this configs are only valid when `is_pre_splited` is false.
-
-  is_pre_splited: false
-  train_dir: ""
-  valid_dir: ""
-  # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
 
   is_shuffle_per_epoch: true
   extensions: ["jpg", "png", "jpeg", "bmp"]
@@ -33,7 +33,7 @@ network:
 
   epoch: 5
   batch: 64
-  subdivisions: 32
+  subdivisions: 1
 
   save_cycle: 0
   valid_cycle: 1
@@ -42,17 +42,10 @@ network:
   # is_save_final_model: true
   is_save_final_model: false
 
-  # net_name: "LightNet"
-  net_name: "Net"
-  optim_name: "RAdam"
+  net_name: "Net"  # ["Net", "LightNet"] in cnn.py
+  optim_name: "RAdam"  # ["Adam", "RAdam"]
 
-  # class_name: "Net"  # ["Net", "LightNet"] in cnn.py
-  # optim_name: "Adam"  # ["Adam", "RAdam"]
-
-  amp: true
-  # amp: false
-
-  # fp16: true
+  amp: true  # Automatic Mixed Precision
 
 option:
   is_show_network_difinition: true

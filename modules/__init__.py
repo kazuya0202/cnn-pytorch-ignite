@@ -1,1 +1,1 @@
-from .my_typings import T, State
+from .my_typings import T, State  # noqa
