@@ -19,7 +19,7 @@ class Predict:
     label: int = -1
     name: str = "None"
     rate: float = 0.0
-    path: T._path_t = ""
+    path: T._path = ""
 
     is_pred: bool = field(init=False)
 
@@ -49,7 +49,7 @@ class ValidModel:
                 ]
             )
 
-    def __load(self, path: T._path_t):
+    def __load(self, path: T._path):
         check_existence(path)
 
         cp = torch.load(path)
@@ -87,7 +87,7 @@ class ValidModel:
                 label, name=self.classes[label], rate=float(pred[0].item()), path=img_path
             )
 
-    def preprocess(self, path: T._path_t) -> Tensor:
+    def preprocess(self, path: T._path) -> Tensor:
         img_pil = Image.open(path).convert("RGB")
         img: Tensor = self.transform(img_pil)
         img = img.unsqueeze_(0).to(self.device)
@@ -96,7 +96,7 @@ class ValidModel:
 
 @dataclass
 class TestConfig:
-    model: T._path_t = r""
+    model: T._path = r""
     gpu_enabled: bool = True
     imgs: List[str] = field(default_factory=list)
 
@@ -105,7 +105,7 @@ class TestConfig:
     channels: int = 3
     class_name: str = "Net"
 
-    class_: T._type_net_t = field(init=False)
+    class_: T._type_net = field(init=False)
     input_size: Tuple[int, int] = field(init=False)
 
     def __post_init__(self) -> None:
@@ -128,7 +128,7 @@ def parse_yaml(path: str) -> TestConfig:
         return TestConfig(**data)
 
 
-def check_existence(path: T._path_t) -> None:
+def check_existence(path: T._path) -> None:
     if not os.path.exists(path):
         raise FileNotFoundError(f"'{path}' does not exist.")
 

@@ -8,7 +8,7 @@ from torch.nn import functional as F
 
 
 class _BaseWrapper(object):
-    def __init__(self, model: T._net_t):
+    def __init__(self, model: T._net):
         super(_BaseWrapper, self).__init__()
         self.device = next(model.parameters()).device
         self.model = model
@@ -66,7 +66,7 @@ class GuidedBackPropagation(BackPropagation):
     Look at Figure 1 on page 8.
     """
 
-    def __init__(self, model: T._net_t):
+    def __init__(self, model: T._net):
         super(GuidedBackPropagation, self).__init__(model)
 
         def backward_hook(module, grad_in, grad_out):
@@ -85,7 +85,7 @@ class Deconvnet(BackPropagation):
     Look at Figure 1 on page 8.
     """
 
-    def __init__(self, model: T._net_t):
+    def __init__(self, model: T._net):
         super(Deconvnet, self).__init__(model)
 
         def backward_hook(module, grad_in, grad_out):
@@ -104,7 +104,7 @@ class GradCAM(_BaseWrapper):
     Look at Figure 2 on page 4
     """
 
-    def __init__(self, model: T._net_t, candidate_layers=None):
+    def __init__(self, model: T._net, candidate_layers=None):
         super(GradCAM, self).__init__(model)
         self.fmap_pool: Dict[str, Tensor] = {}
         self.grad_pool: Dict[str, Tensor] = {}

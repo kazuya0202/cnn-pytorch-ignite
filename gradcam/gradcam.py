@@ -143,7 +143,7 @@ class ExecuteGradCAM:
         self.class_num = len(classes)
 
     @torch.enable_grad()  # enable gradient
-    def main(self, model: T._net_t, image_path: Union[tuple, list, str]) -> dict:
+    def main(self, model: T._net, image_path: Union[tuple, list, str]) -> dict:
         """Switch execute function.
 
         Args:
@@ -179,7 +179,7 @@ class ExecuteGradCAM:
             model.to(restore_device)
         return ret.copy()
 
-    def _execute_one_image(self, model: T._net_t, image_path: str) -> dict:
+    def _execute_one_image(self, model: T._net, image_path: str) -> dict:
         """Process one image.
 
         Args:
@@ -289,7 +289,7 @@ class ExecuteGradCAM:
         del ids, bp, gbp, gcam, image, raw_image
         return processed_data.copy()
 
-    def _execute_multi_images(self, model: T._net_t, image_paths: List[str]) -> dict:
+    def _execute_multi_images(self, model: T._net, image_paths: List[str]) -> dict:
         r"""Process multiple images.
 
         Args:
@@ -415,7 +415,7 @@ class ExecuteOnlyGradCAM:
         }
 
     @torch.enable_grad()  # enable gradient
-    def main(self, model: T._net_t, image_path: T._path_t) -> dict:
+    def main(self, model: T._net, image_path: T._path) -> dict:
         """Switch execute function.
 
         Args:
@@ -444,7 +444,7 @@ class ExecuteOnlyGradCAM:
             model.to(restore_device)
         return ret.copy()
 
-    def _execute_one_image(self, model: T._net_t, image_path: str) -> dict:
+    def _execute_one_image(self, model: T._net, image_path: str) -> dict:
         """Process one image.
 
         Args:

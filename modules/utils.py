@@ -20,7 +20,7 @@ from . import T
 
 @dataclass
 class LogFile:
-    path: Optional[T._path_t] = None
+    path: Optional[T._path] = None
     stdout: bool = False
     clear: bool = False
 
@@ -118,8 +118,8 @@ class MyProgressBar(ProgressBar):
 
 
 def prepare_batch(
-    batch: T._batch_t, device: torch.device, *, non_blocking: bool = False,
-) -> T._batch_t:
+    batch: T._batch, device: torch.device, *, non_blocking: bool = False,
+) -> T._batch:
     x, y = batch
     return (
         x.to(device=device, non_blocking=non_blocking),
@@ -128,8 +128,8 @@ def prepare_batch(
 
 
 def subdivide_batch(
-    batch: T._batch_t, device: torch.device, subdivisions: int, *, non_blocking: bool = False,
-) -> Iterator[Tuple[T._batch_t, int]]:
+    batch: T._batch, device: torch.device, subdivisions: int, *, non_blocking: bool = False,
+) -> Iterator[Tuple[T._batch, int]]:
     x, y = batch
     batch_len = x.size()[0]
     sep = np.linspace(start=0, stop=batch_len, num=subdivisions + 1, dtype=np.int)
@@ -156,7 +156,7 @@ def create_schedule(max_epoch: int, cycle: int) -> List[bool]:
 
 
 def create_filepath(
-    dir_: T._path_t, name: str, is_prefix_seq: bool = False, ext: str = "txt"
+    dir_: T._path, name: str, is_prefix_seq: bool = False, ext: str = "txt"
 ) -> str:
     if isinstance(dir_, str):
         dir_ = Path(dir_)
@@ -166,7 +166,7 @@ def create_filepath(
 
 
 def concat_path(
-    base_path: T._path_t, concat: Union[T._path_t, List[T._path_t]], *, is_make: bool = False
+    base_path: T._path, concat: Union[T._path, List[T._path]], *, is_make: bool = False
 ) -> Path:
     fp = Path(base_path, *concat) if isinstance(concat, list) else Path(base_path, concat)
     if is_make:
@@ -174,8 +174,8 @@ def concat_path(
     return fp
 
 
-def check_existence(path: Union[T._path_t, List[T._path_t]]) -> None:
-    def _inner(path: T._path_t):
+def check_existence(path: Union[T._path, List[T._path]]) -> None:
+    def _inner(path: T._path):
         if not is_exists(path):
             raise FileNotFoundError(f"'{path}' does not exist.")
 
@@ -186,11 +186,11 @@ def check_existence(path: Union[T._path_t, List[T._path_t]]) -> None:
         _inner(path)
 
 
-def is_exists(path: T._path_t) -> bool:
+def is_exists(path: T._path) -> bool:
     return os.path.exists(path)
 
 
-def replace_backslash(s: T._path_t) -> Path:
+def replace_backslash(s: T._path) -> Path:
     return Path(str(s).replace("\\\\", "\\"))
 
 

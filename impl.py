@@ -21,9 +21,9 @@ from modules.global_config import GlobalConfig
 
 @dataclass
 class Model:
-    net: T._net_t
-    optimizer: T._optim_t
-    criterion: T._criterion_t
+    net: T._net
+    optimizer: T._optim
+    criterion: T._criterion
     device: torch.device
 
 
@@ -46,6 +46,7 @@ def train_step(
         y_pred = model.net(x)
         loss = model.criterion(y_pred, y) / iter_size
         loss.backward()
+        total_loss += float(loss)
 
         # save mistaken predicted image
         if is_save_mistaken_pred:
@@ -54,6 +55,42 @@ def train_step(
                 save_image(x, str(minibatch.path))
 
     model.optimizer.step()
+    return total_loss / subdivisions
+
+
+def train_step_with_amp(
+    minibatch: tutils.MiniBatch,
+    model: Model,
+    scaler: torch.cuda.amp.GradScaler,  # type: ignore
+    subdivisions: int,
+    *,
+    is_save_mistaken_pred: bool = False,
+    non_blocking: bool = True,
+):
+    model.net.train()
+    model.optimizer.zero_grad()
+
+    total_loss = 0.0
+
+    for (x, y), iter_size in utils.subdivide_batch(
+        minibatch.batch, model.device, subdivisions, non_blocking=non_blocking
+    ):
+        y_pred = model.net(x)
+        with torch.cuda.amp.autocast():  # type: ignore
+            loss = model.criterion(y_pred, y) / iter_size
+        scaler.scale(loss).backward()
+        # loss.backward()
+        total_loss += float(loss)
+
+        # save mistaken predicted image
+        if is_save_mistaken_pred:
+            ans, pred = utils.get_label(y, y_pred)
+            if ans != pred:
+                save_image(x, str(minibatch.path))
+
+    # model.optimizer.step()
+    scaler.step(model.optimizer)
+    scaler.update()
     return total_loss / subdivisions
 
 
@@ -66,7 +103,7 @@ def validation_step(
     phase: str = "known",
     *,
     non_blocking: bool = True,
-) -> T._batch_t:
+) -> T._batch:
     model.net.eval()
 
     with torch.no_grad():
@@ -147,7 +184,7 @@ def execute_gradcam(
     gc: GlobalConfig,
     gcam: ExecuteGradCAM,
     model: Model,
-    path: T._path_t,
+    path: T._path,
     ans: int,
     pred: int,
     name: str,

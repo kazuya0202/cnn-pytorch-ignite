@@ -1,3 +1,4 @@
+import os
 import random
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -7,7 +8,7 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import Compose, Normalize, ToTensor, Resize
+from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 from . import T, utils
 from .global_config import GlobalConfig
@@ -36,9 +37,9 @@ class MiniBatch:
     Args:
         __data (T._batch_path_t): img, label and path.
     """
-    __data: T._batch_path_t
+    __data: T._batch_path
 
-    batch: T._batch_t = field(init=False)
+    batch: T._batch = field(init=False)
     path: Tensor = field(init=False)
 
     def __post_init__(self) -> None:
@@ -80,6 +81,11 @@ class CreateDataset(Dataset):
         self.known_size = len(self.all_list["known"])
 
         self.all_size = self.train_size + self.unknown_size
+        self.__check_data_size()
+
+    def __check_data_size(self) -> None:
+        if self.all_size == 0:
+            raise ValueError(f"data size == 0, path of dataset is invalid.")
 
     def __glob_data(self, dir_: Path, label_idx: int, *, shuffle: bool = True) -> List[Data]:
         data_list = [
@@ -156,14 +162,17 @@ class CreateDataset(Dataset):
                 ]
             )
 
-        def create_dataloader(key: str, batch_size: int) -> DataLoader:
+        def create_dataloader(key: str, batch_size: int, cpus: int) -> DataLoader:
             dataset_ = CustomDataset(self.all_list[key], transform)
-            return DataLoader(dataset_, batch_size, shuffle=self.gc.dataset.is_shuffle_per_epoch)
+            return DataLoader(dataset_, batch_size, shuffle=self.gc.dataset.is_shuffle_per_epoch, num_workers=cpus, pin_memory=True)
+
+        cpus = os.cpu_count()
+        cpus = 2 if cpus else 0
 
         # create dataloader
-        train_loader = create_dataloader("train", batch_size=self.gc.network.batch)
-        unknown_loader = create_dataloader("unknown", batch_size=1)
-        known_loader = create_dataloader("known", batch_size=1)
+        train_loader = create_dataloader("train", batch_size=self.gc.network.batch, cpus=cpus)
+        unknown_loader = create_dataloader("unknown", batch_size=1, cpus=cpus)
+        known_loader = create_dataloader("known", batch_size=1, cpus=cpus)
 
         return train_loader, unknown_loader, known_loader
 

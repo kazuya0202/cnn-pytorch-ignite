@@ -13,7 +13,7 @@ from torchvision import transforms
 
 @dataclass
 class Extractor:
-    model: T._net_t
+    model: T._net
     target_layer: str
     gradients: Optional[Tensor] = None
 
@@ -40,7 +40,7 @@ class Extractor:
 
 @dataclass
 class GradCAM:
-    model: T._net_t
+    model: T._net
     target_layer: str
     input_size: Tuple[int, int] = (60, 60)
 
@@ -99,7 +99,7 @@ class GradCAM:
 
 
 def preprocess(
-    path: T._path_t, input_size: Tuple[int, int] = (60, 60)
+    path: T._path, input_size: Tuple[int, int] = (60, 60)
 ) -> Tuple[Tensor, np.ndarray]:
     raw_image = Image.open(str(path))
     raw_image = raw_image.resize(input_size)
@@ -126,7 +126,7 @@ class ExecuteGradCAM:
     is_gradcam: bool = True
 
     @torch.enable_grad()
-    def main(self, model: T._net_t, img_path: T._path_t) -> Dict[str, List[Image.Image]]:
+    def main(self, model: T._net, img_path: T._path) -> Dict[str, List[Image.Image]]:
         gcam = GradCAM(model, self.target_layer, self.input_size)
         processed_data = self.__get_init_dict()
 

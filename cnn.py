@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
 import torch
@@ -8,14 +9,67 @@ from torch import Tensor
 from modules import net_utils as nutils
 
 
-class Net(nn.Module):
+@dataclass(init=False, repr=False, eq=False, unsafe_hash=False)
+class BaseNetUtility:
+    features_dict: OrderedDict = field(init=False)
+    classifier_dict: OrderedDict = field(init=False)
+
+    features: nn.Sequential = field(init=False)
+    classifier: nn.Sequential = field(init=False)
+
+    def make_sequential(self) -> None:
+        self.features = nn.Sequential(self.features_dict)
+        self.classifier = nn.Sequential(self.classifier_dict)
+
+    # def set_bias_false_before_bn_layer(self) -> None:
+    #     layers = [layer.find("bn") > -1 for layer in self.features_dict.keys()]
+    #     # for i, layer in enumerate(self.features_dict.keys()):
+    #     #     if layer.find("bn") > -1:
+    #     #         idxs.append(i)
+    #     for layer, i in zip(self.features_dict.keys(), range(len(layers))):
+    #         if i == 0:
+    #             continue
+    #         if layers[i-2]:
+    #             print(layer)
+    #         print(i)
+    #     exit()
+
+    def calc_linear_in_features(
+        self,
+        # features: dict,
+        input_size: Tuple[int, int],
+    ) -> int:
+        # out_channels of  last conv.
+        prev_out_channel = [
+            module.out_channels
+            for layer, module in self.features_dict.items()
+            if layer.find("conv") > -1
+        ][-1]
+        h, w = input_size
+
+        def _calc_out_shape(target: int, module: nn.Module, idx: int) -> int:
+            padding = module.padding[idx]  # type: ignore
+            dilation = module.dilation[idx]  # type: ignore
+            kernel_size = module.kernel_size[idx]  # type: ignore
+            stride = module.stride[idx]  # type: ignore
+            return int((target + (2 * padding) - (dilation * (kernel_size - 1)) - 1) / stride) + 1
+
+        for phase, x in self.features_dict.items():
+            if phase.find("conv") > -1 or phase.find("pool") > -1:
+                h = _calc_out_shape(target=h, module=x, idx=0)
+                w = _calc_out_shape(target=w, module=x, idx=1)
+
+        return h * w * prev_out_channel
+
+
+class Net(nn.Module, BaseNetUtility):
     def __init__(
         self, input_size: Tuple[int, int] = (60, 60), classify_size: int = 3, in_channels: int = 3
     ) -> None:
         super(Net, self).__init__()
 
         # network definiiton
-        features: Dict[str, nn.Module] = OrderedDict(
+        self.features_dict: Dict[str, nn.Module] = OrderedDict(
             [
                 # ("conv1", nutils.Conv_(in_channels, 96, kernel_size=7, stride=1, padding=3).module),
                 ("conv1", nutils.Conv_(in_channels, 96, kernel_size=7, stride=1, padding=1).module),
@@ -38,9 +92,9 @@ class Net(nn.Module):
             ]
         )
 
-        classifier: Dict[str, nn.Module] = OrderedDict(
+        self.classifier_dict: Dict[str, nn.Module] = OrderedDict(
             [
-                ("fc1", nutils.Linear_(calc_linear_in_features(features, input_size), 2048).module),
+                ("fc1", nutils.Linear_(self.calc_linear_in_features(input_size), 2048).module),
                 ("relu1", nutils.ReLU_(inplace=True).module),
                 ("fc2", nutils.Linear_(2048, 512).module),
                 ("relu2", nutils.ReLU_(inplace=True).module),
@@ -48,8 +102,7 @@ class Net(nn.Module):
             ]
         )
 
-        self.features = nn.Sequential(features)
-        self.classifier = nn.Sequential(classifier)
+        self.make_sequential()
 
         # self.features = nn.Sequential(
         #     OrderedDict(
@@ -154,28 +207,3 @@ def num_flat_features(x: Tensor) -> int:
     for s in size:
         num_features *= s
     return num_features
-
-
-def calc_linear_in_features(
-    features: dict,
-    input_size: Tuple[int, int],
-) -> int:
-    # out_channels of  last conv.
-    prev_out_channel = [
-        module.out_channels for layer, module in features.items() if layer.find("conv") > -1
-    ][-1]
-    h, w = input_size
-
-    def _calc_out_shape(target: int, module: nn.Module, idx: int) -> int:
-        padding = module.padding[idx]  # type: ignore
-        dilation = module.dilation[idx]  # type: ignore
-        kernel_size = module.kernel_size[idx]  # type: ignore
-        stride = module.stride[idx]  # type: ignore
-        return int((target + (2 * padding) - (dilation * (kernel_size - 1)) - 1) / stride) + 1
-
-    for phase, x in features.items():
-        if phase.find("conv") > -1 or phase.find("pool") > -1:
-            h = _calc_out_shape(target=h, module=x, idx=0)
-            w = _calc_out_shape(target=w, module=x, idx=1)
-
-    return h * w * prev_out_channel

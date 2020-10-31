@@ -1,7 +1,7 @@
 from typing import Union, Tuple
 from dataclasses import dataclass, field
 
-from torch import nn
+import torch.nn as nn
 
 
 _param_t = Union[int, Tuple[int, int]]
@@ -24,6 +24,9 @@ class Conv_(_Params):
     stride: _param_t = (1, 1)
     padding: _param_t = (0, 0)
     dilation: _param_t = (1, 1)
+    groups: int = 1
+    bias: bool = True
+    padding_mode: str = "zeros"
 
     def __post_init__(self) -> None:
         super().__init__()
@@ -39,6 +42,9 @@ class Conv_(_Params):
             stride=self.stride,
             padding=self.padding,
             dilation=self.dilation,
+            groups=self.groups,
+            bias=self.bias,
+            padding_mode=self.padding_mode,
         )
 
 

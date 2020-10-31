@@ -9,17 +9,17 @@ from modules.radam import RAdam
 
 @dataclass(frozen=True)
 class T:
-    _path_t = Union[Path, str]
+    _path = Union[Path, str]
 
-    _batch_t = Tuple[Tensor, Tensor]
-    _batch_path_t = Tuple[Tensor, Tensor, Tensor]
+    _batch = Tuple[Tensor, Tensor]
+    _batch_path = Tuple[Tensor, Tensor, Tensor]
 
-    _net_t = Union[cnn.Net, cnn.LightNet]
-    _optim_t = Union[optim.Adam, RAdam]
-    _criterion_t = Union[nn.CrossEntropyLoss]
+    _net = Union[cnn.Net, cnn.LightNet]
+    _optim = Union[optim.Adam, RAdam]
+    _criterion = Union[nn.CrossEntropyLoss]
 
-    _type_optim_t = Union[Type[optim.Adam], Type[RAdam]]
-    _type_net_t = Union[Type[cnn.Net], Type[cnn.LightNet]]
+    _type_optim = Union[Type[optim.Adam], Type[RAdam]]
+    _type_net = Union[Type[cnn.Net], Type[cnn.LightNet]]
 
 
 @dataclass(frozen=True)

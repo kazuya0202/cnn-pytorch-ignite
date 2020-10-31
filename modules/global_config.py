@@ -13,9 +13,9 @@ from . import T, utils
 
 @dataclass
 class Path_:
-    dataset: T._path_t = r"./dataset"
-    result_dir: T._path_t = r"./results"
-    tb_log_dir: T._path_t = r"./runs"
+    dataset: T._path = r"./dataset"
+    result_dir: T._path = r"./results"
+    tb_log_dir: T._path = r"./runs"
 
     mistaken: Path = field(init=False)
     model: Path = field(init=False)
@@ -35,8 +35,8 @@ class Dataset_:
     valid_size: Union[int, float] = 0.1
 
     is_pre_splited: bool = False
-    train_dir: T._path_t = r"./dataset/train"
-    valid_dir: T._path_t = r"./dataset/valid"
+    train_dir: T._path = r"./dataset/train"
+    valid_dir: T._path = r"./dataset/valid"
 
     is_shuffle_per_epoch: bool = True
     extensions: List[str] = field(default_factory=list)
@@ -78,10 +78,13 @@ class Network_:
     is_save_final_model: bool = True
 
     net_name: str = "Net"
-    net_: T._type_net_t = cnn.Net
+    net_: T._type_net = cnn.Net
 
     optim_name: str = "Adam"
-    optim_: T._type_optim_t = optim.Adam
+    optim_: T._type_optim = optim.Adam
+
+    amp: bool = True
+    # fp16: bool = True
 
     input_size: Tuple[int, int] = field(init=False)  # height, width
     device: torch.device = field(init=False)
@@ -95,9 +98,15 @@ class Network_:
         if self.optim_name == "RAdam":
             from modules.radam import RAdam
 
-            self.optim_ = RAdam
+            self.optim_ = RAdam  # type: ignore
         else:
             self.optim_ = eval(f"optim.{self.optim_name}")
+
+        if self.amp:
+            try:
+                from torch.cuda import amp  # noqa
+            except ImportError:
+                self.amp = False
 
 
 @dataclass
@@ -141,7 +150,7 @@ class GlobalConfig:
         self.logfile = utils.LogFile(stdout=False)
         self.ratefile = utils.LogFile(stdout=False)
 
-        def mk_path(path: T._path_t, is_make: bool) -> Path:
+        def mk_path(path: T._path, is_make: bool) -> Path:
             # return utils.concat_path(path, self.filename_base, is_make=is_make)
             return utils.concat_path(base_path, path, is_make=is_make)
 
@@ -158,3 +167,15 @@ class GlobalConfig:
         self.path.log = base_path
         if self.option.is_save_log:
             self.path.log.mkdir(parents=True, exist_ok=True)
+
+    def check_dataset_path(self, is_show: bool = True) -> None:
+        if self.dataset.is_pre_splited:
+            utils.check_existence([self.dataset.train_dir, self.dataset.valid_dir])
+            if is_show:
+                print(f"Creating dataset from")
+                print(f"  train - '{self.dataset.train_dir}'")
+                print(f"  valid - '{self.dataset.valid_dir}'...")
+        else:
+            utils.check_existence(self.path.dataset)
+            if is_show:
+                print(f"Creating dataset from '{self.path.dataset}'...")

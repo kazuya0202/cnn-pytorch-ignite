@@ -49,6 +49,11 @@ network:
   # class_name: "Net"  # ["Net", "LightNet"] in cnn.py
   # optim_name: "Adam"  # ["Adam", "RAdam"]
 
+  amp: true
+  # amp: false
+
+  # fp16: true
+
 option:
   is_show_network_difinition: true
   is_save_log: false

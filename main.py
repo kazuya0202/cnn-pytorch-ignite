@@ -9,8 +9,8 @@ from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
 
-# from ignite.metrics.running_average import RunningAverage
-from torch import nn
+import torch.nn as nn
+import torch.backends.cudnn as cudnn
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
@@ -26,21 +26,10 @@ def run() -> None:
     transform = Compose(
         [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
-    if gc.network.gpu_enabled:
-        torch.backends.cudnn.enabled = True  # type: ignore
+    cudnn.benchmark = True
 
-    if gc.dataset.is_pre_splited:
-        utils.check_existence([gc.dataset.train_dir, gc.dataset.valid_dir])
-        print(f"Creating dataset from")
-        print(f"  train - '{gc.dataset.train_dir}'")
-        print(f"  valid - '{gc.dataset.valid_dir}'...")
-    else:
-        utils.check_existence(gc.path.dataset)
-        print(f"Creating dataset from '{gc.path.dataset}'...")
-
+    gc.check_dataset_path(is_show=True)
     dataset = tutils.CreateDataset(gc)  # train, unknown, known
-    if dataset.all_size == 0:
-        raise ValueError(f"data size == 0, path of dataset is invalid.")
 
     train_loader, unknown_loader, known_loader = dataset.get_dataloader(transform)
 
@@ -91,7 +80,9 @@ def run() -> None:
         is_gradcam=gc.gradcam.enabled,
     )
 
-    def train_step(engine: Engine, batch: T._batch_path_t):
+    scaler = torch.cuda.amp.GradScaler() if gc.network.amp else None  # type: ignore
+
+    def train_step(engine: Engine, batch: T._batch_path):
         minibatch = tutils.MiniBatch(batch)
         return impl.train_step(
             minibatch,
@@ -101,18 +92,29 @@ def run() -> None:
             non_blocking=True,
         )
 
-    def unknown_validation_step(engine: Engine, batch: T._batch_path_t):
+    def train_step_with_amp(engine: Engine, batch: T._batch_path):
+        minibatch = tutils.MiniBatch(batch)
+        return impl.train_step_with_amp(
+            minibatch,
+            model,
+            scaler,
+            subdivisions=gc.network.subdivisions,
+            is_save_mistaken_pred=gc.option.is_save_mistaken_pred,
+            non_blocking=True,
+        )
+
+    def unknown_validation_step(engine: Engine, batch: T._batch_path):
         minibatch = tutils.MiniBatch(batch)
         return impl.validation_step(
             engine, minibatch, model, gc, gcam, "unknown", non_blocking=True
         )
 
-    def known_validation_step(engine: Engine, batch: T._batch_path_t):
+    def known_validation_step(engine: Engine, batch: T._batch_path):
         minibatch = tutils.MiniBatch(batch)
         return impl.validation_step(engine, minibatch, model, gc, gcam, "known", non_blocking=True)
 
     # trainer / evaluator
-    trainer = Engine(train_step)
+    trainer = Engine(train_step) if not gc.network.amp else Engine(train_step_with_amp)
     unknown_evaluator = Engine(unknown_validation_step)
     known_evaluator = Engine(known_validation_step)
 
@@ -171,7 +173,6 @@ def run() -> None:
 def parse_yaml(path: str) -> GlobalConfig:
     utils.check_existence(path)
 
-    gc: GlobalConfig
     with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
         gc = GlobalConfig(data)
