@@ -29,7 +29,7 @@ class BaseNetUtility:
     ) -> int:
         # out_channels of  last conv.
         prev_out_channel = [
-            int(module.out_channels.item())
+            module.out_channels.item()
             for layer, module in self.features_dict.items()
             if layer.find("conv") > -1
         ][-1]
