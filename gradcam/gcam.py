@@ -51,7 +51,7 @@ class GradCAM:
         self.model.eval()
         self.extractor = Extractor(self.model, self.target_layer)
 
-    def generate_cam(self, image: Tensor, device: torch.device, target_cls: int = None):
+    def generate_cam(self, image: Tensor, device: torch.device, target_cls: int = None) -> np.ndarray:
         conv_output, model_output = self.extractor.forward_pass(image)
         if target_cls is None:
             target_cls = np.argmax(model_output.detach().cpu().numpy())
@@ -102,7 +102,7 @@ class GradCAM:
 def preprocess(
     path: T._path, input_size: Tuple[int, int] = (60, 60)
 ) -> Tuple[Tensor, np.ndarray]:
-    raw_image = Image.open(str(path))
+    raw_image = Image.open(str(path)).convert("RGB")
     raw_image = raw_image.resize(input_size)
 
     image = transforms.Compose(
@@ -138,9 +138,10 @@ class ExecuteGradCAM:
         cam = gcam.generate_cam(image, self.device, target_cls=None)
         heatmap, heatmap_on_image = gcam.apply_cmap_on_image(raw_image, cam, "rainbow")
 
+        cam_img = Image.fromarray(cam)
         processed_data["ggcam"].append(heatmap)
         processed_data["gcam"].append(heatmap_on_image)
-        processed_data["gbp"].append(cam)
+        processed_data["gbp"].append(cam_img)
         return processed_data
 
     def __get_init_dict(self) -> Dict[str, list]:
