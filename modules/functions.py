@@ -48,7 +48,7 @@ def execute_gradcam(
     path: T._path,
     ans: int,
     pred: int,
-    name: str,
+    phase: str,
 ) -> None:
     if not gcam.schedule[engine.state.epoch - 1]:
         return
@@ -65,7 +65,7 @@ def execute_gradcam(
 
     dir_name = "correct" if is_correct else "mistaken"
     base_dir = utils.concat_path(
-        gcam_base_dir, concat=[f"{name}_{dir_name}", epoch_str], is_make=True
+        gcam_base_dir, concat=[f"{phase}_{dir_name}", epoch_str], is_make=True
     )
 
     ret = gcam.main(model.net, str(path))
@@ -76,12 +76,12 @@ def execute_gradcam(
 
     # for name, data_list in pbar:  # name: "gcam", "gbp" ...
     ext = "jpg"
-    for name, data_list in ret.items():  # name: "gcam", "gbp" ...
+    for phase, data_list in ret.items():  # name: "gcam", "gbp" ...
         for i, img in enumerate(data_list):
             # is_png = name == "gbp"
             # ext = "png" if is_png else "jpg"
 
-            s = f"{iteration}_{gcam.classes[i]}_{name}_pred[{pred}]_correct[{ans}].{ext}"
+            s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].{ext}"
             path_ = base_dir.joinpath(s)
 
             # img = img.convert("RGBA" if is_png else "RGB")

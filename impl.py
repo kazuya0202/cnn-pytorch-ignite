@@ -87,7 +87,7 @@ def validation_step(
         y_pred = model.net(x)
 
     ans, pred = utils.get_label(y, y_pred)
-    exec_gcam_fn(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
+    exec_gcam_fn(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase.lower())
     return y_pred, y
 
 
