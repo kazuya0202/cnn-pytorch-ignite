@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import torch
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch import Tensor
@@ -45,6 +46,15 @@ class MiniBatch:
     def __post_init__(self) -> None:
         self.batch = (self.__data[0], self.__data[1])
         self.path = self.__data[2]
+
+
+@dataclass
+class Model:
+    net: T._net
+    optimizer: T._optim
+    criterion: T._criterion
+    device: torch.device
+    scaler: Optional[torch.cuda.amp.GradScaler] = None  # type: ignore
 
 
 @dataclass
@@ -164,7 +174,13 @@ class CreateDataset(Dataset):
 
         def create_dataloader(key: str, batch_size: int, cpus: int) -> DataLoader:
             dataset_ = CustomDataset(self.all_list[key], transform)
-            return DataLoader(dataset_, batch_size, shuffle=self.gc.dataset.is_shuffle_per_epoch, num_workers=cpus, pin_memory=True)
+            return DataLoader(
+                dataset_,
+                batch_size,
+                shuffle=self.gc.dataset.is_shuffle_per_epoch,
+                num_workers=cpus,
+                pin_memory=True,
+            )
 
         cpus = os.cpu_count()
         cpus = 2 if cpus else 0

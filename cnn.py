@@ -1,7 +1,8 @@
 from collections import OrderedDict
-from typing import OrderedDict as OrderedDictType
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict
+from typing import OrderedDict as OrderedDictType
+from typing import Tuple
 
 import torch
 import torch.nn as nn
@@ -29,7 +30,7 @@ class BaseNetUtility:
     ) -> int:
         # out_channels of  last conv.
         prev_out_channel = [
-            module.out_channels.item()
+            int(module.out_channels)  # type: ignore
             for layer, module in self.features_dict.items()
             if layer.find("conv") > -1
         ][-1]

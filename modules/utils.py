@@ -128,22 +128,17 @@ def prepare_batch(
 
 
 def subdivide_batch(
-    batch: T._batch,
-    device: torch.device,
-    subdivisions: int,
-    *,
-    non_blocking: bool = False,
-    # ) -> Iterator[Tuple[T._batch, int]]:
+    batch: T._batch, device: torch.device, subdivisions: int, *, non_blocking: bool = False,
 ) -> Iterator[T._batch]:
     x, y = batch
-    batch_len = x.size()[0]
+    batch_len = x.size(0)
     sep = np.linspace(start=0, stop=batch_len, num=subdivisions + 1, dtype=np.int)
+
+    if batch_len == len(sep) - 1:
+        sep = sep[1:]
 
     for n, m in zip(sep[:-1], sep[1:]):
         batch = (x[n:m], y[n:m])
-        if batch[0].size()[0] == 0:
-            continue
-        # yield prepare_batch(batch, device, non_blocking=non_blocking), m - n
         yield prepare_batch(batch, device, non_blocking=non_blocking)
 
 
@@ -152,13 +147,13 @@ def attach_metrics(evaluator: Engine, metrics: Dict[str, Any]) -> None:
         metric.attach(evaluator, name)
 
 
-def create_schedule(max_epoch: int, cycle: int) -> List[bool]:
+def create_schedule(max_epoch: int, cycle: int, *, last: bool = True) -> List[bool]:
     if cycle == 0:
-        return [*[False] * (max_epoch - 1), True]  # [-1] is only True.
+        return [*[False] * (max_epoch - 1), last]  # [-1] is only True.
 
     # range(N - 1) -> last epoch is True.
     _ = [(i + 1) % cycle == 0 for i in range(max_epoch - 1)]
-    return [*_, True]
+    return [*_, last]
 
 
 def create_filepath(dir_: T._path, name: str, is_prefix_seq: bool = False, ext: str = "txt") -> str:

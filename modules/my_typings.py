@@ -25,5 +25,7 @@ class T:
 @dataclass(frozen=True)
 class State:
     TRAINING = "Training"
+    UNKNOWN = "Unknown"
+    KNOWN = "Known"
     UNKNOWN_VALID = "Unkonwn Validation"
     KNOWN_VALID = "Known Validation"

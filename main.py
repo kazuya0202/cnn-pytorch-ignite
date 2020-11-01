@@ -4,19 +4,19 @@ from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
 import torch
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
 import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics import Accuracy, ConfusionMatrix, Loss
-
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import impl
 from gradcam import ExecuteGradCAM
 from modules import State, T
+from modules import functions as fns
 from modules import torch_utils as tutils
 from modules import utils
 from modules.global_config import GlobalConfig
@@ -43,21 +43,21 @@ def run() -> None:
 
     print(f"Building network by '{gc.network.net_.__name__}'...")
     net = gc.network.net_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
-    model = impl.Model(
+    scaler = torch.cuda.amp.GradScaler() if gc.network.amp else None  # type: ignore
+
+    model = tutils.Model(
         net,
         optimizer=gc.network.optim_(net.parameters()),
         criterion=nn.CrossEntropyLoss(),
         device=device,
+        scaler=scaler,
     )
-    del net
+    del net, scaler
 
     # logfile
     if gc.option.is_save_log:
-        p = Path(gc.path.log, "log.txt")
-        gc.logfile = utils.LogFile(p, stdout=False)
-
-        p = Path(gc.path.log, "rate.csv")
-        gc.ratefile = utils.LogFile(p, stdout=False)
+        gc.logfile = utils.LogFile(Path(gc.path.log, "log.txt"), stdout=False)
+        gc.ratefile = utils.LogFile(Path(gc.path.log, "rate.csv"), stdout=False)
 
         classes_ = ",".join(classes)
         gc.ratefile.writeline(f"epoch,known,{classes_},avg,,unknown,{classes_},avg")
@@ -81,39 +81,46 @@ def run() -> None:
         is_gradcam=gc.gradcam.enabled,
     )
 
-    scaler = torch.cuda.amp.GradScaler() if gc.network.amp else None  # type: ignore
-    # function of save mistaken image.
-    save_mistaken_img_fn = (
-        impl.save_mistaken_image if gc.option.is_save_mistaken_pred else impl.no_save_mistaken_image
+    # dummy functions
+    exec_gcam_fn = fns.execute_gradcam if gc.gradcam.enabled else fns.dummy_execute_gradcam
+    save_img_fn = (
+        fns.save_mistaken_image
+        if gc.option.is_save_mistaken_pred
+        else fns.dummy_save_mistaken_image
     )
 
     def train_step(engine: Engine, batch: T._batch_path):
         return impl.train_step(
-            tutils.MiniBatch(batch),
-            model,
-            subdivisions=gc.network.subdivisions,
-            save_img_fn=save_mistaken_img_fn,
-            non_blocking=True,
+            tutils.MiniBatch(batch), model, gc.network.subdivisions, save_img_fn, non_blocking=True,
         )
 
     def train_step_with_amp(engine: Engine, batch: T._batch_path):
         return impl.train_step_with_amp(
-            tutils.MiniBatch(batch),
-            model,
-            scaler,
-            subdivisions=gc.network.subdivisions,
-            save_img_fn=save_mistaken_img_fn,
-            non_blocking=True,
+            tutils.MiniBatch(batch), model, gc.network.subdivisions, save_img_fn, non_blocking=True,
         )
 
     def unknown_validation_step(engine: Engine, batch: T._batch_path):
         return impl.validation_step(
-            engine, tutils.MiniBatch(batch), model, gc, gcam, "unknown", non_blocking=True
+            engine,
+            tutils.MiniBatch(batch),
+            model,
+            gc,
+            gcam,
+            exec_gcam_fn,
+            phase=State.UNKNOWN,
+            non_blocking=True,
         )
 
     def known_validation_step(engine: Engine, batch: T._batch_path):
         return impl.validation_step(
-            engine, tutils.MiniBatch(batch), model, gc, gcam, "known", non_blocking=True
+            engine,
+            tutils.MiniBatch(batch),
+            model,
+            gc,
+            gcam,
+            exec_gcam_fn,
+            phase=State.KNOWN,
+            non_blocking=True,
         )
 
     # trainer / evaluator
@@ -134,8 +141,8 @@ def run() -> None:
     pbar.attach(trainer, metric_names="all")
 
     collect_list = [
-        (known_evaluator, known_loader, State.KNOWN_VALID),
-        (unknown_evaluator, unknown_loader, State.UNKNOWN_VALID),
+        (known_evaluator, known_loader, State.KNOWN),
+        (unknown_evaluator, unknown_loader, State.UNKNOWN),
     ]
 
     # tensorboard
@@ -149,9 +156,12 @@ def run() -> None:
     save_schedule = utils.create_schedule(gc.network.epoch, gc.network.save_cycle)
     save_schedule[-1] = gc.network.is_save_final_model  # depends on config.
 
+    save_cm_fn = fns.save_cm_image if gc.option.is_save_cm else fns.dummy_save_cm_image
+
     def validate_model(engine: Engine, collect_list: List[Tuple[Engine, DataLoader, str]]):
         if valid_schedule[engine.state.epoch - 1]:
-            impl.validate_model(engine, collect_list, gc, pbar, classes, tb_logger)
+            impl.validate_model(engine, collect_list, gc, pbar, classes, save_cm_fn)
+            # impl.validate_model(engine, collect_list, gc, pbar, classes, tb_logger)
 
     def save_model(engine: Engine):
         epoch = engine.state.epoch

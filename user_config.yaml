@@ -20,11 +20,11 @@ dataset:
   extensions: ["jpg", "png", "jpeg", "bmp"]
 
 gradcam:
-  enabled: false
+  enabled: true
   # enabled: true
   only_mistaken: false
   layer: "conv5"
-  cycle: 10
+  cycle: 1
 
 network:
   height: 64

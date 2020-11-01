@@ -163,6 +163,10 @@ class GlobalConfig:
         self.path.gradcam = mk_path("GradCAM", is_make=self.gradcam.enabled)
         self.path.cm = mk_path("confusion_matrix", is_make=self.option.is_save_cm)
 
+        if self.option.is_save_cm:
+            self.path.cm.joinpath("unknown").mkdir(parents=True, exist_ok=True)
+            self.path.cm.joinpath("known").mkdir(parents=True, exist_ok=True)
+
         self.path.log = base_path
         if self.option.is_save_log:
             self.path.log.mkdir(parents=True, exist_ok=True)

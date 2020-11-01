@@ -1,50 +1,26 @@
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
-import numpy as np
 import torch
-import tqdm
 from ignite.engine import Events
 from ignite.engine.engine import Engine
-from PIL import Image
-from torch.tensor import Tensor
 from torch.utils.data.dataloader import DataLoader
-from torchvision.utils import save_image
 
 from gradcam import ExecuteGradCAM
-from modules import T
+from modules import State, T
+from modules import functions as fns
 from modules import torch_utils as tutils
 from modules import utils
 from modules.global_config import GlobalConfig
 
 
-@dataclass
-class Model:
-    net: T._net
-    optimizer: T._optim
-    criterion: T._criterion
-    device: torch.device
-
-
-def save_mistaken_image(self, batch: T._batch, y_pred: Tensor, path: str) -> None:
-    x, y = batch
-    ans, pred = utils.get_label(y, y_pred)
-    if ans != pred:
-        save_image(x, path)
-
-
-def no_save_mistaken_image(batch: T._batch, y_pred: Tensor, path: str) -> None:
-    return
-
-
 def train_step(
     minibatch: tutils.MiniBatch,
-    model: Model,
+    model: tutils.Model,
     subdivisions: int,
+    save_img_fn: fns.save_img_fn_t = fns.dummy_save_mistaken_image,
     *,
-    save_img_fn: Any = no_save_mistaken_image,
     non_blocking: bool = True,
 ):
     model.net.train()
@@ -67,11 +43,10 @@ def train_step(
 
 def train_step_with_amp(
     minibatch: tutils.MiniBatch,
-    model: Model,
-    scaler: torch.cuda.amp.GradScaler,  # type: ignore
+    model: tutils.Model,
     subdivisions: int,
+    save_img_fn: fns.save_img_fn_t = fns.dummy_save_mistaken_image,  # from functions.py
     *,
-    save_img_fn: Any = no_save_mistaken_image,
     non_blocking: bool = True,
 ):
     model.net.train()
@@ -84,24 +59,25 @@ def train_step_with_amp(
         with torch.cuda.amp.autocast():  # type: ignore
             y_pred = model.net(x)
             loss = model.criterion(y_pred, y)
-        scaler.scale(loss).backward()
+        model.scaler.scale(loss).backward()
         total_loss += float(loss)
 
         # save mistaken predicted image
         save_img_fn((x, y), y_pred, str(minibatch.path))
-    scaler.step(model.optimizer)
-    scaler.update()
+    model.scaler.step(model.optimizer)
+    model.scaler.update()
     return total_loss / subdivisions
 
 
 def validation_step(
     engine: Engine,
     minibatch: tutils.MiniBatch,
-    model: Model,
+    model: tutils.Model,
     gc: GlobalConfig,
     gcam: ExecuteGradCAM,
-    phase: str = "known",
+    exec_gcam_fn: fns.exec_gcam_fn_t = fns.dummy_execute_gradcam,  # from functions.py
     *,
+    phase: str = State.KNOWN,
     non_blocking: bool = True,
 ) -> T._batch:
     model.net.eval()
@@ -111,8 +87,7 @@ def validation_step(
         y_pred = model.net(x)
 
     ans, pred = utils.get_label(y, y_pred)
-    if gcam.schedule[engine.state.epoch - 1]:
-        execute_gradcam(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
+    exec_gcam_fn(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase)
     return y_pred, y
 
 
@@ -122,11 +97,14 @@ def validate_model(
     gc: GlobalConfig,
     pbar: utils.MyProgressBar,
     classes: List[str],
-    tb_logger: Optional[tbl.TensorboardLogger],
+    save_cm_fn: fns.save_cm_fn_t = fns.dummy_save_cm_image,  # from functions.py
+    # tb_logger: Optional[tbl.TensorboardLogger],
 ) -> None:
     epoch_num = engine.state.epoch
     gc.logfile.writeline(f"--- Epoch: {epoch_num}/{engine.state.max_epochs} ---")
     gc.ratefile.write(f"{epoch_num}")
+
+    align_size = max([len(v) for v in classes]) + 2  # "[class_name]"
 
     for evaluator, loader, phase in collect_list:
         evaluator.run(loader)
@@ -135,27 +113,23 @@ def validate_model(
         avg_loss = metrics["loss"]
 
         pbar.log_message("")
-        pbar.log_message(f"{phase} Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}")
+        pbar.log_message(
+            f"{phase.capitalize()} Validation Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}"
+        )
 
         cm = metrics["cm"]
-        phase_name = phase.split(" ")[0].lower()
 
         # confusion matrix
         title = f"Confusion Matrix - {phase} (Epoch {epoch_num})"
         fig = utils.plot_confusion_matrix(cm, classes, title=title)
 
-        if gc.option.is_save_cm:
-            p = gc.path.cm.joinpath(phase_name, f"epoch{epoch_num}_{phase_name}.jpg")
-            p.parent.mkdir(parents=True, exist_ok=True)
-            fig.savefig(str(p))  # type: ignore
-
-        if tb_logger:
-            title = "Confusion Matrix " + phase_name.capitalize()
-            utils.add_image_to_tensorboard(tb_logger, fig, title, epoch_num)
+        save_cm_fn(gc.path.cm, phase, epoch_num, fig)
+        # if tb_logger:
+        #     title = "Confusion Matrix " + phase_name.capitalize()
+        #     utils.add_image_to_tensorboard(tb_logger, fig, title, epoch_num)
 
         gc.ratefile.write(f",,")
 
-        align_size = max([len(v) for v in classes]) + 2  # "[class_name]"
         cm = cm.cpu().numpy()
         for i, cls_name in enumerate(classes):
             n_all = sum(cm[i])
@@ -167,7 +141,6 @@ def validate_model(
             pbar.log_message(s)
 
             gc.ratefile.write(f"{acc:<.3f},")
-
         gc.ratefile.write(f"{avg_acc},")
 
     pbar.log_message("\n")
@@ -178,55 +151,7 @@ def validate_model(
     gc.ratefile.flush()
 
 
-def execute_gradcam(
-    engine: Engine,
-    gc: GlobalConfig,
-    gcam: ExecuteGradCAM,
-    model: Model,
-    path: T._path,
-    ans: int,
-    pred: int,
-    name: str,
-) -> None:
-    # do not execute / execute only mistaken
-    is_correct = ans == pred
-    # if any([(not gc.gradcam.enabled), (gc.gradcam.only_mistaken and is_correct)]):
-    if gc.gradcam.only_mistaken and is_correct:
-        return
-    epoch = engine.state.epoch
-    iteration = engine.state.iteration
-
-    gcam_base_dir = Path(gc.path.gradcam)
-    epoch_str = f"epoch{epoch}"
-
-    dir_name = "correct" if is_correct else "mistaken"
-    base_dir = utils.concat_path(
-        gcam_base_dir, concat=[f"{name}_{dir_name}", epoch_str], is_make=True
-    )
-
-    ret = gcam.main(model.net, str(path))
-    ret.pop("gbp")  # ignore gbp, now
-    pbar = tqdm.tqdm(ret.items(), desc="Grad-CAM", leave=False)
-
-    for name, data_list in pbar:  # name: "gcam", "gbp" ...
-        for i, img in enumerate(data_list):
-            # is_png = name == "gbp"
-            # ext = "png" if is_png else "jpg"
-            ext = "jpg"
-
-            s = f"{iteration}_{gcam.classes[i]}_{name}_pred[{pred}]_correct[{ans}].{ext}"
-            path_ = base_dir.joinpath(s)
-
-            if isinstance(img, np.ndarray):
-                img = Image.fromarray(img)
-            # img = img.convert("RGBA" if is_png else "RGB")
-            img = img.convert("RGB")
-            img.save(str(path_))
-            # print(path_)
-    del ret
-
-
-def save_model(model: Model, classes: List[str], gc: GlobalConfig, epoch: int):
+def save_model(model: tutils.Model, classes: List[str], gc: GlobalConfig, epoch: int):
     path = utils.create_filepath(Path(gc.path.model), f"epoch{epoch}", ext="pt")
     print(f"Saving model to '{path}'...")
 
@@ -238,7 +163,7 @@ def attach_log_to_tensorboard(
     tb_logger: tbl.TensorboardLogger,
     trainer: Engine,
     _list: List[Tuple[Engine, DataLoader, str]],
-    model: Model,
+    model: tutils.Model,
 ) -> None:
     # attach_num = 1
 
@@ -289,7 +214,7 @@ def attach_log_to_tensorboard(
 
 
 def show_network_difinition(
-    gc: GlobalConfig, model: Model, dataset: tutils.CreateDataset, stdout: bool = False
+    gc: GlobalConfig, model: tutils.Model, dataset: tutils.CreateDataset, stdout: bool = False
 ) -> None:
     r"""Show network difinition on console.
 
