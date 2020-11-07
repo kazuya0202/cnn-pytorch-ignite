@@ -107,14 +107,11 @@ def validate_model(
     align_size = max([len(v) for v in classes]) + 2  # "[class_name]"
 
     for evaluator, loader, phase in collect_list:
-        evaluator.run(loader)
-        metrics = evaluator.state.metrics
-        avg_acc = metrics["acc"]
-        avg_loss = metrics["loss"]
+        metrics = evaluator.run(loader).metrics
+        avg_acc, avg_loss = metrics["acc"], metrics["loss"]
 
-        pbar.log_message("")
         pbar.log_message(
-            f"{phase.capitalize()} Validation Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}"
+            f"\n{phase.capitalize()} Validation Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}"
         )
 
         cm = metrics["cm"]
@@ -124,10 +121,6 @@ def validate_model(
         fig = utils.plot_confusion_matrix(cm, classes, title=title)
 
         save_cm_fn(gc.path.cm, phase, epoch_num, fig)
-        # if tb_logger:
-        #     title = "Confusion Matrix " + phase_name.capitalize()
-        #     utils.add_image_to_tensorboard(tb_logger, fig, title, epoch_num)
-
         gc.ratefile.write(f",,")
 
         cm = cm.cpu().numpy()

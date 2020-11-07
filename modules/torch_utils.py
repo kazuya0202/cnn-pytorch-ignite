@@ -91,9 +91,7 @@ class CreateDataset(Dataset):
         self.known_size = len(self.all_list["known"])
 
         self.all_size = self.train_size + self.unknown_size
-        self.__check_data_size()
 
-    def __check_data_size(self) -> None:
         if self.all_size == 0:
             raise ValueError(f"data size == 0, path of dataset is invalid.")
 
@@ -108,7 +106,7 @@ class CreateDataset(Dataset):
             random.shuffle(data_list)
         return data_list
 
-    def __extend_dataset(self, train: List[Data], valid: List[Data]) -> None:
+    def __extend_each_dataset(self, train: List[Data], valid: List[Data]) -> None:
         self.all_list["train"].extend(train)
         self.all_list["unknown"].extend(valid)
         self.all_list["known"].extend(random.sample(train, len(valid)))
@@ -125,7 +123,7 @@ class CreateDataset(Dataset):
             train = self.__glob_data(t_dir, label_idx, shuffle=True)
             valid = self.__glob_data(v_dir, label_idx, shuffle=True)
 
-            self.__extend_dataset(train, valid)
+            self.__extend_each_dataset(train, valid)
             self.classes[label_idx] = t_dir.name
 
     def __get_dataset(self) -> None:
@@ -146,7 +144,7 @@ class CreateDataset(Dataset):
             # split dataset
             train, valid = train_test_split(data_list, test_size=self.gc.dataset.valid_size)
 
-            self.__extend_dataset(train, valid)
+            self.__extend_each_dataset(train, valid)
             self.classes[label_idx] = dir_.name
 
     def write_config(self) -> None:
@@ -183,7 +181,7 @@ class CreateDataset(Dataset):
             )
 
         cpus = os.cpu_count()
-        cpus = 2 if cpus else 0
+        cpus = 2 if cpus and cpus > 1 else 0
 
         # create dataloader
         train_loader = create_dataloader("train", batch_size=self.gc.network.batch, cpus=cpus)
