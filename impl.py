@@ -101,9 +101,9 @@ def validate_model(
     for loader, phase in collect_list:
         # table
         table = Texttable()
-        table.header(["Name", "Accuracy", "Detail"])
+        table.header(["No.", "Name", "Accuracy", "Detail"])
         table.set_deco(Texttable.HEADER)
-        table.set_cols_align(["l", "r", "l"])
+        table.set_cols_align(["c", "l", "r", "l"])
 
         softmaxfile = utils.LogFile(
             gc.path.softmax.joinpath(f"epoch{epoch}_{phase.lower()}.csv"), stdout=False
@@ -141,7 +141,7 @@ def validate_model(
             pbar.log_message(
                 f"\n{phase.capitalize()} Validation Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}"
             )
-            cm = metrics["cm"].compute()
+            cm = utils.tensor2np(metrics["cm"].compute())
 
             # confusion matrix
             title = f"Confusion Matrix - {phase} (Epoch {epoch})"
@@ -150,19 +150,17 @@ def validate_model(
             save_cm_fn(gc.path.cm, phase, epoch, fig)
             gc.ratefile.write(f",,")
 
-            cm = utils.tensor2np(cm)
             for i, cls_name in enumerate(classes):
                 n_all = sum(cm[i])
                 n_acc = cm[i][i]
                 acc = n_acc / n_all
 
-                table.add_row([cls_name, acc, f"{n_acc} / {n_all} images"])
+                table.add_row([i, cls_name, acc, f"{n_acc} / {n_all} images"])
                 gc.ratefile.write(f"{acc:<.3f},")
             gc.ratefile.write(f"{avg_acc},")
+            table.add_row(["*", "[avg]", round(avg_acc, 3), "-"])
 
-            content = table.draw()
-            if content:
-                pbar.log_message(content)
+            pbar.log_message(f"\n{table.draw()}")
 
         softmaxfile.flush()
         softmaxfile.close()

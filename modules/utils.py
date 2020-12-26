@@ -216,7 +216,7 @@ def add_image_to_tensorboard(
 
 
 def plot_confusion_matrix(
-    cm: Union[torch.Tensor, np.ndarray],
+    cm: np.ndarray,
     classes: List[str],
     normalize: bool = False,
     title: str = "Confusion matrix",
@@ -225,7 +225,7 @@ def plot_confusion_matrix(
     r"""Plot confusion matrix.
 
     Args:
-        cm (Union[Tensor, np.ndarray]): array of confusion matrix.
+        cm (np.ndarray): array of confusion matrix.
         classes (List[str]): class list.
         normalize (bool, optional): normalize. Defaults to False.
         title (str, optional): plot title. Defaults to 'Confusion matrix'.
@@ -234,15 +234,8 @@ def plot_confusion_matrix(
     Returns:
         plt.Figure: plotted figure.
     """
-    # Tensor to np.ndarray
-    cm_np: np.ndarray
-    if isinstance(cm, Tensor):
-        cm = tensor2np(cm)
-    cm_np = cm
-    del cm
-
     if normalize:
-        cm_np = cm_np.astype("float") / cm_np.sum(axis=1)[:, np.newaxis]  # type: ignore
+        cm = cm.astype("float") / cm.sum(axis=1)[:, np.newaxis]  # type: ignore
 
     # change font size
     plt.rcParams["font.size"] = 18  # type: ignore
@@ -267,20 +260,20 @@ def plot_confusion_matrix(
     # grid
     # axes.grid(which='minor', color='b', linestyle='-', linewidth=3)
 
-    img = plt.imshow(cm_np, interpolation="nearest", cmap=cmap)  # type: ignore
+    img = plt.imshow(cm, interpolation="nearest", cmap=cmap)  # type: ignore
 
     # adjust color bar
     divider = make_axes_locatable(axes)
     cax = divider.append_axes("right", size="5%", pad=0.1)
     fig.colorbar(img, cax=cax)  # type: ignore
 
-    thresh = cm_np.max() / 2.0
+    thresh = cm.max() / 2.0
     fmt = ".2f" if normalize else "d"
 
     # plot text
     for i, j in itertools.product(range(len(classes)), range(len(classes))):
-        clr = "white" if cm_np[i, j] > thresh else "black"
-        axes.text(j, i, format(cm_np[i, j], fmt), ha="center", va="center", color=clr)  # type: ignore
+        clr = "white" if cm[i, j] > thresh else "black"
+        axes.text(j, i, format(cm[i, j], fmt), ha="center", va="center", color=clr)  # type: ignore
 
     plt.tight_layout()
     fig = plt.gcf()
