@@ -3,8 +3,8 @@ path:
   # dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
 
   is_pre_splited: true
-  train_dir: "../TrainImage/"
-  valid_dir: "../TestImage/"
+  train_dir: "D:/workspace/pro/__dataset/cnn_dataset_2020_12_24/TrainImage/"
+  valid_dir: "D:/workspace/pro/__dataset/cnn_dataset_2020_12_24/TestImage/"
   # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
 
   result_dir: "./results"
