@@ -51,7 +51,9 @@ class GradCAM:
         self.model.eval()
         self.extractor = Extractor(self.model, self.target_layer)
 
-    def generate_cam(self, image: Tensor, device: torch.device, target_cls: int = None) -> np.ndarray:
+    def generate_cam(
+        self, image: Tensor, device: torch.device, target_cls: int = None
+    ) -> np.ndarray:
         conv_output, model_output = self.extractor.forward_pass(image)
         if target_cls is None:
             target_cls = np.argmax(model_output.detach().cpu().numpy())
@@ -81,7 +83,7 @@ class GradCAM:
         return cam
 
     def apply_cmap_on_image(
-        self, original_img: Image.Image, activation: np.ndarray, cmap_name: str = "rainbow"
+        self, original_img_np: np.ndarray, activation: np.ndarray, cmap_name: str = "rainbow"
     ):
         cmap = mpl_cm.get_cmap(cmap_name)
         no_trans_heatmap = cmap(activation)
@@ -91,7 +93,7 @@ class GradCAM:
         no_trans_heatmap = Image.fromarray((no_trans_heatmap * 255).astype(np.uint8))  # type: ignore
 
         # convert to Image
-        original_img = Image.fromarray(original_img)
+        original_img = Image.fromarray(original_img_np)
 
         heatmap_on_image = Image.new("RGBA", original_img.size)
         heatmap_on_image = Image.alpha_composite(heatmap_on_image, original_img.convert("RGBA"))
@@ -99,9 +101,7 @@ class GradCAM:
         return no_trans_heatmap, heatmap_on_image
 
 
-def preprocess(
-    path: T._path, input_size: Tuple[int, int] = (60, 60)
-) -> Tuple[Tensor, np.ndarray]:
+def preprocess(path: T._path, input_size: Tuple[int, int] = (60, 60)) -> Tuple[Tensor, np.ndarray]:
     raw_image = Image.open(str(path)).convert("RGB")
     raw_image = raw_image.resize(input_size)
 
@@ -126,27 +126,65 @@ class ExecuteGradCAM:
     schedule: List[bool]
     is_gradcam: bool = True
 
+    # @torch.enable_grad()
+    # # TODO: receive multi images.
+    # def process_multi_image(self, model: T._net, img_path: T._path) -> Dict[str, List[Image.Image]]:
+    #     gcam = GradCAM(model, self.target_layer, self.input_size)
+    #     processed_data = self.__get_init_dict_for_multi()
+
+    #     image, raw_image = preprocess(img_path, self.input_size)
+    #     image = image.unsqueeze_(0).to(self.device)
+    #     # raw_image = torch.from_numpy(RawIOBase).unsqueeze_(0).to(self.device)
+    #     raw_image = Image.fromarray(raw_image)
+
+    #     cam = gcam.generate_cam(image, self.device, target_cls=None)
+    #     heatmap, heatmap_on_image = gcam.apply_cmap_on_image(raw_image, cam, "rainbow")
+
+    #     cam_img = Image.fromarray(cam)
+    #     processed_data[GradCamType.HMAP].append(heatmap)
+    #     processed_data[GradCamType.HMAP_ON_IMG].append(heatmap_on_image)
+    #     processed_data[GradCamType.CAM].append(cam_img)
+    #     return processed_data
+
+    # def __get_init_dict_for_multi(self) -> Dict[str, list]:
+    #     return {
+    #         # "gbp": [],  # Guided Back Propagation
+    #         # "gcam": [],  # Grad-CAM
+    #         # "ggcam": [],  # Guided Grad-CAM
+    #         GradCamType.HMAP: [],
+    #         GradCamType.HMAP_ON_IMG: [],
+    #         GradCamType.CAM: [],
+    #     }
+
     @torch.enable_grad()
-    def main(self, model: T._net, img_path: T._path) -> Dict[str, List[Image.Image]]:
+    def process_single_image(self, model: T._net, img_path: T._path) -> Dict[str, Image.Image]:
         gcam = GradCAM(model, self.target_layer, self.input_size)
-        processed_data = self.__get_init_dict()
+        processed_data = self.__get_init_dict_for_single()
 
         image, raw_image = preprocess(img_path, self.input_size)
         image = image.unsqueeze_(0).to(self.device)
-        # raw_image = torch.from_numpy(RawIOBase).unsqueeze_(0).to(self.device)
+        # raw_image = Image.fromarray(raw_image)
 
         cam = gcam.generate_cam(image, self.device, target_cls=None)
         heatmap, heatmap_on_image = gcam.apply_cmap_on_image(raw_image, cam, "rainbow")
 
         cam_img = Image.fromarray(cam)
-        processed_data["ggcam"].append(heatmap)
-        processed_data["gcam"].append(heatmap_on_image)
-        processed_data["gbp"].append(cam_img)
+        processed_data[GradCamType.HMAP] = heatmap
+        processed_data[GradCamType.HMAP_ON_IMG] = heatmap_on_image
+        processed_data[GradCamType.CAM] = cam_img
         return processed_data
 
-    def __get_init_dict(self) -> Dict[str, list]:
+    def __get_init_dict_for_single(self) -> Dict[str, Image.Image]:
+        empty_image = Image.new("RGB", (60, 60))
         return {
-            "gbp": [],  # Guided Back Propagation
-            "gcam": [],  # Grad-CAM
-            "ggcam": [],  # Guided Grad-CAM
+            GradCamType.HMAP: empty_image.copy(),
+            GradCamType.HMAP_ON_IMG: empty_image.copy(),
+            GradCamType.CAM: empty_image.copy(),
         }
+
+
+@dataclass(frozen=True)
+class GradCamType:
+    HMAP: str = "heatmap"
+    HMAP_ON_IMG: str = "heatmap_on_image"
+    CAM: str = "cam"

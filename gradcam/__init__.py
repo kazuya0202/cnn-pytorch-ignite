@@ -1,1 +1,1 @@
-from .gcam import ExecuteGradCAM  # noqa
+from .gcam import ExecuteGradCAM, GradCamType  # noqa

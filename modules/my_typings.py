@@ -15,10 +15,10 @@ class T:
     _batch_path = Tuple[Tensor, Tensor, Tensor]
 
     _net = Union[cnn.Net, cnn.LightNet]
-    _optim = Union[optim.Adam, RAdam]
+    _optim = Union[optim.Adam, RAdam, optim.SGD]
     _criterion = Union[nn.CrossEntropyLoss]
 
-    _type_optim = Union[Type[optim.Adam], Type[RAdam]]
+    _type_optim = Union[Type[optim.Adam], Type[RAdam], Type[optim.SGD]]
     _type_net = Union[Type[cnn.Net], Type[cnn.LightNet]]
 
 

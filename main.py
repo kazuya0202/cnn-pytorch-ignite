@@ -1,15 +1,16 @@
 from argparse import ArgumentParser
+from itertools import product
 from pathlib import Path
 from typing import List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
-import torch
 import torch.backends.cudnn as cudnn
+import torch.cuda.amp as amp
 import torch.nn as nn
 import yaml
 from ignite.engine import Events
 from ignite.engine.engine import Engine
-from ignite.metrics import Accuracy, ConfusionMatrix, Loss
+from torch import optim
 from torch.utils.data.dataloader import DataLoader
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
@@ -43,21 +44,26 @@ def run() -> None:
 
     print(f"Building network by '{gc.network.net_.__name__}'...")
     net = gc.network.net_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
-    scaler = torch.cuda.amp.GradScaler() if gc.network.amp else None  # type: ignore
+    if isinstance(gc.network.optim_, optim.SGD):
+        optimizer = gc.network.optim_(
+            net.parameters(), lr=gc.network.lr, momentum=gc.network.momentum
+        )
+    else:
+        optimizer = gc.network.optim_(net.parameters(), lr=gc.network.lr)
 
     model = tutils.Model(
         net,
-        optimizer=gc.network.optim_(net.parameters()),
+        optimizer=optimizer,
         criterion=nn.CrossEntropyLoss(),
         device=device,
-        scaler=scaler,
+        scaler=amp.GradScaler(enabled=gc.network.amp),
     )
-    del net, scaler
+    del net
 
     # logfile
     if gc.option.is_save_log:
-        gc.logfile = utils.LogFile(Path(gc.path.log, "log.txt"), stdout=False)
-        gc.ratefile = utils.LogFile(Path(gc.path.log, "rate.csv"), stdout=False)
+        gc.logfile = utils.LogFile(gc.path.log.joinpath("log.txt"), stdout=False)
+        gc.ratefile = utils.LogFile(gc.path.log.joinpath("rate.csv"), stdout=False)
 
         classes_ = ",".join(classes)
         gc.ratefile.writeline(f"epoch,known,{classes_},avg,,unknown,{classes_},avg")
@@ -81,6 +87,24 @@ def run() -> None:
         is_gradcam=gc.gradcam.enabled,
     )
 
+    # mkdir for gradcam
+    phases = ["known", "unknown"]
+    mkdir_options = {"parents": True, "exist_ok": True}
+    for i, flag in enumerate(gcam_schedule):
+        if not flag:
+            continue
+        ep_str = f"epoch{i+1}"
+        for phase, cls in product(phases, classes):
+            gc.path.gradcam.joinpath(f"{phase}_mistaken", ep_str, cls).mkdir(**mkdir_options)
+        if not gc.gradcam.only_mistaken:
+            for phase, cls in product(phases, classes):
+                gc.path.gradcam.joinpath(f"{phase}_correct", ep_str, cls).mkdir(**mkdir_options)
+
+    # progress bar
+    pbar = utils.MyProgressBar(
+        persist=True, logfile=gc.logfile, disable=gc.option.is_show_batch_result
+    )
+
     # dummy functions
     exec_gcam_fn = fns.execute_gradcam if gc.gradcam.enabled else fns.dummy_execute_gradcam
     save_img_fn = (
@@ -88,61 +112,30 @@ def run() -> None:
         if gc.option.is_save_mistaken_pred
         else fns.dummy_save_mistaken_image
     )
+    exec_softmax_fn = (
+        fns.execute_softmax if gc.option.is_save_softmax else fns.dummy_execute_softmax
+    )
 
-    def train_step(engine: Engine, batch: T._batch_path):
+    def train_step(engine: Engine, batch: T._batch_path) -> float:
         return impl.train_step(
-            tutils.MiniBatch(batch), model, gc.network.subdivisions, save_img_fn, non_blocking=True,
-        )
-
-    def train_step_with_amp(engine: Engine, batch: T._batch_path):
-        return impl.train_step_with_amp(
-            tutils.MiniBatch(batch), model, gc.network.subdivisions, save_img_fn, non_blocking=True,
-        )
-
-    def unknown_validation_step(engine: Engine, batch: T._batch_path):
-        return impl.validation_step(
             engine,
             tutils.MiniBatch(batch),
             model,
+            gc.network.subdivisions,
             gc,
-            gcam,
-            exec_gcam_fn,
-            phase=State.UNKNOWN,
+            pbar,
+            use_amp=gc.network.amp,
+            save_img_fn=save_img_fn,
             non_blocking=True,
         )
 
-    def known_validation_step(engine: Engine, batch: T._batch_path):
-        return impl.validation_step(
-            engine,
-            tutils.MiniBatch(batch),
-            model,
-            gc,
-            gcam,
-            exec_gcam_fn,
-            phase=State.KNOWN,
-            non_blocking=True,
-        )
-
-    # trainer / evaluator
-    trainer = Engine(train_step) if not gc.network.amp else Engine(train_step_with_amp)
-    unknown_evaluator = Engine(unknown_validation_step)
-    known_evaluator = Engine(known_validation_step)
-
-    metrics = {
-        "acc": Accuracy(),
-        "loss": Loss(model.criterion),
-        "cm": ConfusionMatrix(len(classes)),
-    }
-    utils.attach_metrics(unknown_evaluator, metrics)
-    utils.attach_metrics(known_evaluator, metrics)
-
-    # progress bar
-    pbar = utils.MyProgressBar(persist=True, logfile=gc.logfile)
+    # trainer
+    trainer = Engine(train_step)
     pbar.attach(trainer, metric_names="all")
 
     collect_list = [
-        (known_evaluator, known_loader, State.KNOWN),
-        (unknown_evaluator, unknown_loader, State.UNKNOWN),
+        (known_loader, State.KNOWN),
+        (unknown_loader, State.UNKNOWN),
     ]
 
     # tensorboard
@@ -158,12 +151,28 @@ def run() -> None:
 
     save_cm_fn = fns.save_cm_image if gc.option.is_save_cm else fns.dummy_save_cm_image
 
-    def validate_model(engine: Engine, collect_list: List[Tuple[Engine, DataLoader, str]]):
-        if valid_schedule[engine.state.epoch - 1]:
-            impl.validate_model(engine, collect_list, gc, pbar, classes, save_cm_fn)
-            # impl.validate_model(engine, collect_list, gc, pbar, classes, tb_logger)
+    def validate_model(engine: Engine, collect_list: List[Tuple[DataLoader, str]]) -> None:
+        epoch = engine.state.epoch
+        # do not validate.
+        if not (valid_schedule[epoch - 1] or gcam_schedule[epoch - 1]):
+            return
 
-    def save_model(engine: Engine):
+        impl.validate_model(
+            engine,
+            collect_list,
+            gc,
+            pbar,
+            classes,
+            gcam=gcam,
+            model=model,
+            valid_schedule=valid_schedule,
+            exec_gcam_fn=exec_gcam_fn,
+            exec_softmax_fn=exec_softmax_fn,
+            save_cm_fn=save_cm_fn,
+            non_blocking=True,
+        )
+
+    def save_model(engine: Engine) -> None:
         epoch = engine.state.epoch
         if save_schedule[epoch - 1]:
             impl.save_model(model, classes, gc, epoch)

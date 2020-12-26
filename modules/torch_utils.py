@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
+import torch.cuda.amp as amp
 from PIL import Image
 from sklearn.model_selection import train_test_split
 from torch import Tensor
@@ -54,7 +55,7 @@ class Model:
     optimizer: T._optim
     criterion: T._criterion
     device: torch.device
-    scaler: Optional[torch.cuda.amp.GradScaler] = None  # type: ignore
+    scaler: amp.GradScaler
 
 
 @dataclass

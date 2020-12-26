@@ -1,7 +1,9 @@
 from pathlib import Path
-from typing import Callable
+from typing import Callable, List
 
-from gradcam import ExecuteGradCAM
+import torch
+import torch.nn.functional as F
+from gradcam import ExecuteGradCAM, GradCamType
 from ignite.engine.engine import Engine
 from matplotlib.figure import Figure
 from torch import Tensor
@@ -14,8 +16,12 @@ from . import T, utils
 
 save_img_fn_t = Callable[[T._batch, Tensor, str], None]
 save_cm_fn_t = Callable[[Path, str, int, Figure], None]
+
 exec_gcam_fn_t = Callable[
     [Engine, GlobalConfig, ExecuteGradCAM, tutils.Model, T._path, int, int, str], None
+]
+exec_softmax_fn_t = Callable[
+    [T._path, GlobalConfig, Tensor, Tensor, List[str], utils.LogFile], None
 ]
 
 
@@ -27,7 +33,7 @@ def save_mistaken_image(batch: T._batch, y_pred: Tensor, path: str) -> None:
 
 
 def dummy_save_mistaken_image(batch: T._batch, y_pred: Tensor, path: str) -> None:
-    return
+    pass
 
 
 def save_cm_image(base_dir: Path, phase: str, epoch: int, fig: Figure) -> None:
@@ -37,10 +43,12 @@ def save_cm_image(base_dir: Path, phase: str, epoch: int, fig: Figure) -> None:
 
 
 def dummy_save_cm_image(base_dir: Path, phase: str, epoch: int, fig: Figure) -> None:
-    return
+    pass
 
 
 def execute_gradcam(
+    # epoch: int,
+    # iteration: int,
     engine: Engine,
     gc: GlobalConfig,
     gcam: ExecuteGradCAM,
@@ -50,45 +58,56 @@ def execute_gradcam(
     pred: int,
     phase: str,
 ) -> None:
-    if not gcam.schedule[engine.state.epoch - 1]:
+    epoch = engine.state.epoch
+    # iteration = engine.state.iteration
+
+    if not gcam.schedule[epoch - 1]:
         return
 
     # do not execute / execute only mistaken
     is_correct = ans == pred
     if gc.gradcam.only_mistaken and is_correct:
         return
-    epoch = engine.state.epoch
-    iteration = engine.state.iteration
-
-    gcam_base_dir = Path(gc.path.gradcam)
-    epoch_str = f"epoch{epoch}"
 
     dir_name = "correct" if is_correct else "mistaken"
-    base_dir = utils.concat_path(
-        gcam_base_dir, concat=[f"{phase}_{dir_name}", epoch_str], is_make=True
-    )
+    cls_name = gcam.classes[ans]
+    base_dir = gc.path.gradcam.joinpath(f"{phase}_{dir_name}", f"epoch{epoch}", cls_name)
 
-    ret = gcam.main(model.net, str(path))
-    ret.pop("gbp")  # ignore gbp
-    ret.pop("ggcam")  # ignore ggcam
-    # pbar = tqdm.tqdm(ret.items(), desc="Grad-CAM", leave=False)
+    path = Path(path)
+    ret = gcam.process_single_image(model.net, path)
+    ret.pop(GradCamType.CAM)  # ignore cam
+
     print("\rExecute Grad-CAM...", end="")
 
-    # for name, data_list in pbar:  # name: "gcam", "gbp" ...
-    ext = "jpg"
-    for phase, data_list in ret.items():  # name: "gcam", "gbp" ...
-        for i, img in enumerate(data_list):
-            # is_png = name == "gbp"
-            # ext = "png" if is_png else "jpg"
+    path = path.name
+    path_stem = path[: path.rfind(".")]
 
-            s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].{ext}"
-            path_ = base_dir.joinpath(s)
-
-            # img = img.convert("RGBA" if is_png else "RGB")
-            img = img.convert("RGB")
-            img.save(str(path_))
-            # print(path_)
+    for phase, data in ret.items():  # phase: heatmap, heatmap_on_image
+        # filename = f"{iteration}_{path_stem}_pred[{pred}]_ans[{ans}]_{phase}.jpg"
+        filename = f"{path_stem}_pred[{pred}]_ans[{ans}]_{phase}.jpg"
+        out = base_dir.joinpath(filename)
+        img = data.convert("RGB")  # ?
+        img.save(str(out))
     del ret
+
+    # ret = gcam.process_multi_image(model.net, str(path))
+    # ret.pop(GradCamType.CAM)
+    # for phase, data_list in pbar:  # name: "heatmap", "heatmap_on_image" ...
+    # ext = "jpg"
+    # for phase, data_list in ret.items():
+    #     for i, img in enumerate(data_list):
+    #         # is_png = name == "gbp"
+    #         # ext = "png" if is_png else "jpg"
+
+    #         # s = f"{iteration}_{gcam.classes[i]}_{phase}_pred[{pred}]_correct[{ans}].{ext}"
+    #         s = f"{iteration}_{phase}_"
+    #         path_ = gc.gcam_base_dir.joinpath(s)
+
+    #         # img = img.convert("RGBA" if is_png else "RGB")
+    #         img = img.convert("RGB")
+    #         img.save(str(path_))
+    #         # print(path_)
+    # del ret
 
 
 def dummy_execute_gradcam(
@@ -99,6 +118,37 @@ def dummy_execute_gradcam(
     path: T._path,
     ans: int,
     pred: int,
-    name: str,
+    phase: str,
 ) -> None:
-    return
+    pass
+
+
+def execute_softmax(
+    path: T._path,
+    gc: GlobalConfig,
+    y_pred: Tensor,
+    y: Tensor,
+    classes: List[str],
+    softmaxfile: utils.LogFile,
+) -> None:
+    # batch is only 1.
+    pred_softmax = F.softmax(y_pred, dim=1)[0]
+    path = Path(path).name
+    filename = path[: path.rfind(".")]
+    softmax_list = list(map(lambda x: str(round(x.item(), 5)), pred_softmax))
+    correct_cls = classes[int(y.item())]
+    pred_cls = classes[int(torch.argmax(pred_softmax).item())]
+    onehot = ",".join(softmax_list)
+    softmaxfile.writeline(f"{correct_cls},{pred_cls},{filename},,,{onehot}")
+    # print(f"{correct_cls}, {pred_cls}, {filename}, {onehot}")
+
+
+def dummy_execute_softmax(
+    path: T._path,
+    gc: GlobalConfig,
+    y_pred: Tensor,
+    y: Tensor,
+    classes: List[str],
+    softmaxfile: utils.LogFile,
+) -> None:
+    pass

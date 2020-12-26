@@ -3,12 +3,18 @@ from typing import Any, Dict, List, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
 import torch
+import torch.nn.functional as F
 from ignite.engine import Events
 from ignite.engine.engine import Engine
+from ignite.metrics.accuracy import Accuracy
+from ignite.metrics.confusion_matrix import ConfusionMatrix
+from ignite.metrics.loss import Loss
+from ignite.metrics.metric import Metric
+from texttable import Texttable
 from torch.utils.data.dataloader import DataLoader
 
 from gradcam import ExecuteGradCAM
-from modules import State, T
+from modules import T
 from modules import functions as fns
 from modules import torch_utils as tutils
 from modules import utils
@@ -16,131 +22,157 @@ from modules.global_config import GlobalConfig
 
 
 def train_step(
+    engine: Engine,
     minibatch: tutils.MiniBatch,
     model: tutils.Model,
     subdivisions: int,
-    save_img_fn: fns.save_img_fn_t = fns.dummy_save_mistaken_image,
+    gc: GlobalConfig,
+    pbar: utils.MyProgressBar,
+    use_amp: bool = False,
     *,
-    non_blocking: bool = True,
-):
-    model.net.train()
-    model.optimizer.zero_grad()
-    total_loss = 0.0
-
-    for x, y in utils.subdivide_batch(
-        minibatch.batch, model.device, subdivisions, non_blocking=non_blocking
-    ):
-        y_pred = model.net(x)
-        loss = model.criterion(y_pred, y)
-        loss.backward()
-        total_loss += float(loss)
-
-        # save mistaken predicted image
-        save_img_fn((x, y), y_pred, str(minibatch.path))
-    model.optimizer.step()
-    return total_loss / subdivisions
-
-
-def train_step_with_amp(
-    minibatch: tutils.MiniBatch,
-    model: tutils.Model,
-    subdivisions: int,
     save_img_fn: fns.save_img_fn_t = fns.dummy_save_mistaken_image,  # from functions.py
-    *,
     non_blocking: bool = True,
 ):
     model.net.train()
     model.optimizer.zero_grad()
     total_loss = 0.0
 
+    epoch = engine.state.epoch
+    max_epochs = engine.state.max_epochs
+
     for x, y in utils.subdivide_batch(
         minibatch.batch, model.device, subdivisions, non_blocking=non_blocking
     ):
-        with torch.cuda.amp.autocast():  # type: ignore
+        with torch.cuda.amp.autocast(enabled=use_amp):  # type: ignore
             y_pred = model.net(x)
             loss = model.criterion(y_pred, y)
         model.scaler.scale(loss).backward()
         total_loss += float(loss)
 
         # save mistaken predicted image
-        save_img_fn((x, y), y_pred, str(minibatch.path))
+        save_img_fn((x, y), y_pred, str(minibatch.path[0]))
+
+        # TODO: now, output labels are under 10. in file, all output?
+        # softmax
+        pred_labels = [str(torch.argmax(x).item()) for x in F.softmax(y_pred[:10], dim=1)]
+        pred_labels = " ".join(pred_labels)
+        ans_labels = utils.tensor2np(y[:10])
+        pbar.log_message(
+            f"Epoch [{epoch}/{max_epochs}]: pred [{pred_labels}] | ans {ans_labels}, loss: {round(total_loss / subdivisions, 3)}",
+            stdout=gc.option.is_show_batch_result,
+        )
     model.scaler.step(model.optimizer)
     model.scaler.update()
     return total_loss / subdivisions
 
 
-def validation_step(
-    engine: Engine,
-    minibatch: tutils.MiniBatch,
-    model: tutils.Model,
-    gc: GlobalConfig,
-    gcam: ExecuteGradCAM,
-    exec_gcam_fn: fns.exec_gcam_fn_t = fns.dummy_execute_gradcam,  # from functions.py
-    *,
-    phase: str = State.KNOWN,
-    non_blocking: bool = True,
-) -> T._batch:
+def validate_loader(batch: T._batch, model: tutils.Model, *, non_blocking: bool = True,) -> Any:
     model.net.eval()
-
     with torch.no_grad():
-        x, y = utils.prepare_batch(minibatch.batch, model.device, non_blocking=non_blocking)
+        x, y = utils.prepare_batch(batch, model.device, non_blocking=non_blocking)
         y_pred = model.net(x)
-
-    ans, pred = utils.get_label(y, y_pred)
-    exec_gcam_fn(engine, gc, gcam, model, str(minibatch.path[0]), ans, pred, phase.lower())
     return y_pred, y
 
 
 def validate_model(
     engine: Engine,
-    collect_list: List[Tuple[Engine, DataLoader, str]],
+    collect_list: List[Tuple[DataLoader, str]],
     gc: GlobalConfig,
     pbar: utils.MyProgressBar,
     classes: List[str],
+    gcam: ExecuteGradCAM,
+    model: tutils.Model,
+    valid_schedule: List[bool],
+    *,
+    exec_gcam_fn: fns.exec_gcam_fn_t = fns.dummy_execute_gradcam,  # from functions.py
+    exec_softmax_fn: fns.exec_softmax_fn_t = fns.dummy_execute_softmax,  # from functions.py
     save_cm_fn: fns.save_cm_fn_t = fns.dummy_save_cm_image,  # from functions.py
+    non_blocking: bool = True,
     # tb_logger: Optional[tbl.TensorboardLogger],
 ) -> None:
-    epoch_num = engine.state.epoch
-    gc.logfile.writeline(f"--- Epoch: {epoch_num}/{engine.state.max_epochs} ---")
-    gc.ratefile.write(f"{epoch_num}")
+    epoch = engine.state.epoch
+    max_epochs = engine.state.max_epochs
+    # iteration = engine.state.iteration
 
-    align_size = max([len(v) for v in classes]) + 2  # "[class_name]"
+    gc.logfile.writeline(f"--- Epoch: {epoch}/{max_epochs} ---")
+    gc.ratefile.write(f"{epoch}")
 
-    for evaluator, loader, phase in collect_list:
-        metrics = evaluator.run(loader).metrics
-        avg_acc, avg_loss = metrics["acc"], metrics["loss"]
+    # for evaluator, loader, phase in collect_list:
+    for loader, phase in collect_list:
+        # table
+        table = Texttable()
+        table.header(["Name", "Accuracy", "Detail"])
+        table.set_deco(Texttable.HEADER)
+        table.set_cols_align(["l", "r", "l"])
 
-        pbar.log_message(
-            f"\n{phase.capitalize()} Validation Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}"
+        softmaxfile = utils.LogFile(
+            gc.path.softmax.joinpath(f"epoch{epoch}_{phase.lower()}.csv"), stdout=False
         )
 
-        cm = metrics["cm"]
+        classes_ = ",".join([f"[{cls}]" for cls in classes])
+        softmaxfile.writeline(f"correct class,predict class,filename,,softmax,{classes_}")
 
-        # confusion matrix
-        title = f"Confusion Matrix - {phase} (Epoch {epoch_num})"
-        fig = utils.plot_confusion_matrix(cm, classes, title=title)
+        metrics: Dict[str, Metric] = {}
 
-        save_cm_fn(gc.path.cm, phase, epoch_num, fig)
-        gc.ratefile.write(f",,")
+        # compute only validation.
+        if valid_schedule[epoch - 1]:
+            metrics = {
+                "acc": Accuracy(device=model.device),
+                "loss": Loss(model.criterion, device=model.device),
+                "cm": ConfusionMatrix(len(classes), device=model.device),
+            }
 
-        cm = cm.cpu().numpy()
-        for i, cls_name in enumerate(classes):
-            n_all = sum(cm[i])
-            n_acc = cm[i][i]
-            acc = n_acc / n_all
+        for x, y, path in loader:
+            y_pred, y = validate_loader((x, y), model)
+            ans, pred = utils.get_label(y, y_pred)
 
-            cls_name = f"[{cls_name}]".ljust(align_size)
-            s = f" {cls_name} -> acc: {acc:<.3f} ({n_acc} / {n_all} images.)"
-            pbar.log_message(s)
+            path = str(path[0])
+            exec_softmax_fn(path, gc, y_pred, y, gcam.classes, softmaxfile)
+            exec_gcam_fn(engine, gc, gcam, model, path, ans, pred, phase.lower())
 
-            gc.ratefile.write(f"{acc:<.3f},")
-        gc.ratefile.write(f"{avg_acc},")
+            # update metrics
+            for metric in metrics.values():
+                metric.update(output=(y_pred, y))
+
+        if valid_schedule[epoch - 1]:
+            # conpute average
+            avg_acc = metrics["acc"].compute()
+            avg_loss = metrics["loss"].compute()
+            pbar.log_message(
+                f"\n{phase.capitalize()} Validation Results -  Avg accuracy: {avg_acc:.3f} Avg loss: {avg_loss:.3f}"
+            )
+            cm = metrics["cm"].compute()
+
+            # confusion matrix
+            title = f"Confusion Matrix - {phase} (Epoch {epoch})"
+            fig = utils.plot_confusion_matrix(cm, classes, title=title)
+
+            save_cm_fn(gc.path.cm, phase, epoch, fig)
+            gc.ratefile.write(f",,")
+
+            cm = utils.tensor2np(cm)
+            for i, cls_name in enumerate(classes):
+                n_all = sum(cm[i])
+                n_acc = cm[i][i]
+                acc = n_acc / n_all
+
+                table.add_row([cls_name, acc, f"{n_acc} / {n_all} images"])
+                gc.ratefile.write(f"{acc:<.3f},")
+            gc.ratefile.write(f"{avg_acc},")
+
+            content = table.draw()
+            if content:
+                pbar.log_message(content)
+
+        softmaxfile.flush()
+        softmaxfile.close()
 
     pbar.log_message("\n")
     pbar.n = pbar.last_print_n = 0  # type: ignore
 
-    gc.logfile.flush()
     gc.ratefile.writeline()
+
+    gc.logfile.flush()
     gc.ratefile.flush()
 
 

@@ -1,27 +1,27 @@
 path:
   # dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
-  dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
-  # dataset: "C:\\ichiya\\prcn2019\\prcn2019-datasets\\datasets\\Images-20191014"
+  # dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
 
-  is_pre_splited: false
-  train_dir: ""
-  valid_dir: ""
+  is_pre_splited: true
+  train_dir: "../TrainImage/"
+  valid_dir: "../TestImage/"
   # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
 
   result_dir: "./results"
   tb_log_dir: "./runs"
 
 dataset:
+  # limit_size: 100
   limit_size: -1
   valid_size: 0.1
   # ^^^^^^^^ this configs are only valid when `is_pre_splited` is false.
 
   is_shuffle_per_epoch: true
-  extensions: ["jpg", "png", "jpeg", "bmp"]
+  extensions: ["jpg", "png", "jpeg", "bmp", "gif"]
 
 gradcam:
   enabled: true
-  # enabled: true
+  # enabled: false
   only_mistaken: false
   layer: "conv5"
   cycle: 1
@@ -31,9 +31,9 @@ network:
   width: 64
   channels: 3
 
-  epoch: 5
-  batch: 64
-  subdivisions: 1
+  epoch: 30
+  batch: 60
+  subdivisions: 2
 
   save_cycle: 0
   valid_cycle: 1
@@ -42,15 +42,22 @@ network:
   # is_save_final_model: true
   is_save_final_model: false
 
-  net_name: "Net"  # ["Net", "LightNet"] in cnn.py
-  optim_name: "RAdam"  # ["Adam", "RAdam"]
+  net_name: "Net" # ["Net", "LightNet"] in cnn.py
+  optim_name: "SGD"  # ["Adam", "RAdam", SGD]
 
-  amp: true  # Automatic Mixed Precision
+  lr: 0.01
+  momentum: 0.9  # only `SGD`
+
+  amp: false # Automatic Mixed Precision
 
 option:
   is_show_network_difinition: true
+  is_show_batch_result: false
+
   is_save_log: false
   is_save_mistaken_pred: false
   is_save_config: false
   log_tensorboard: false
-  is_save_cm: false  # confusion matrix
+  is_save_cm: false # confusion matrix
+  is_save_softmax: true
+  # is_save_softmax: false

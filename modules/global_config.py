@@ -3,10 +3,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 
-from torch import optim
-
 import cnn
 import torch
+from torch import optim
 
 from . import T, utils
 
@@ -27,6 +26,7 @@ class Path_:
     gradcam: Path = field(init=False)
     log: Path = field(init=False)
     cm: Path = field(init=False)
+    softmax: Path = field(init=False)
 
     def __post_init__(self) -> None:
         self.dataset = utils.replace_backslash(self.dataset)
@@ -78,10 +78,12 @@ class Network_:
     is_save_final_model: bool = True
 
     net_name: str = "Net"
-    net_: T._type_net = cnn.Net
-
     optim_name: str = "Adam"
-    optim_: T._type_optim = optim.Adam
+    net_: T._type_net = field(init=False, default=cnn.Net)
+    optim_: T._type_optim = field(init=False, default=optim.Adam)
+
+    lr: float = 0.001
+    momentum: float = 0.9
 
     amp: bool = True
 
@@ -111,11 +113,14 @@ class Network_:
 @dataclass
 class Option_:
     is_show_network_difinition: bool = True
+    is_show_batch_result: bool = False  # False -> progress bar
+
     is_save_log: bool = True
     is_save_mistaken_pred: bool = False
     is_save_config: bool = False
     log_tensorboard: bool = False
     is_save_cm: bool = False
+    is_save_softmax: bool = False
 
 
 @dataclass
@@ -130,6 +135,7 @@ class GlobalConfig:
 
     filename_base: str = field(init=False)
     logfile: utils.LogFile = field(init=False)
+    ratefile: utils.LogFile = field(init=False)
 
     def __post_init__(self):
         if not self.__data:  # empty dict
@@ -149,9 +155,9 @@ class GlobalConfig:
         self.logfile = utils.LogFile(stdout=False)
         self.ratefile = utils.LogFile(stdout=False)
 
-        def mk_path(path: T._path, is_make: bool) -> Path:
+        def mk_path(joinpath: T._path, is_make: bool) -> Path:
             # return utils.concat_path(path, self.filename_base, is_make=is_make)
-            return utils.concat_path(base_path, path, is_make=is_make)
+            return utils.concat_path(base_path, joinpath, is_make=is_make)
 
         # determine directory structure / make directory
         base_path = Path(self.path.result_dir, self.filename_base)
@@ -162,6 +168,7 @@ class GlobalConfig:
         self.path.config = mk_path("config", is_make=self.option.is_save_config)
         self.path.gradcam = mk_path("GradCAM", is_make=self.gradcam.enabled)
         self.path.cm = mk_path("confusion_matrix", is_make=self.option.is_save_cm)
+        self.path.softmax = mk_path("softmax", is_make=self.option.is_save_softmax)
 
         if self.option.is_save_cm:
             self.path.cm.joinpath("unknown").mkdir(parents=True, exist_ok=True)
