@@ -3,7 +3,6 @@ from itertools import product
 from pathlib import Path
 from typing import List, Tuple
 
-import ignite.contrib.handlers.tensorboard_logger as tbl
 import torch.backends.cudnn as cudnn
 import torch.cuda.amp as amp
 import torch.nn as nn
@@ -12,6 +11,7 @@ from ignite.engine import Events
 from ignite.engine.engine import Engine
 from torch import optim
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.tensorboard.writer import SummaryWriter
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import impl
@@ -58,7 +58,7 @@ def run() -> None:
         device=device,
         scaler=amp.GradScaler(enabled=gc.network.amp),
     )
-    del net
+    del net, optimizer
 
     # logfile
     if gc.option.is_save_log:
@@ -133,16 +133,12 @@ def run() -> None:
     trainer = Engine(train_step)
     pbar.attach(trainer, metric_names="all")
 
-    collect_list = [
-        (known_loader, State.KNOWN),
-        (unknown_loader, State.UNKNOWN),
-    ]
-
-    # tensorboard
-    tb_logger = None
-    if gc.option.log_tensorboard:
-        tb_logger = tbl.TensorboardLogger(logdir=str(Path(gc.path.tb_log_dir, gc.filename_base)))
-        impl.attach_log_to_tensorboard(tb_logger, trainer, collect_list, model)
+    # tensorboard logger
+    tb_logger = (
+        SummaryWriter(log_dir=str(Path(gc.path.tb_log_dir, gc.filename_base)))
+        if gc.option.log_tensorboard
+        else None
+    )
 
     # schedule
     valid_schedule = utils.create_schedule(gc.network.epoch, gc.network.valid_cycle)
@@ -166,6 +162,7 @@ def run() -> None:
             gcam=gcam,
             model=model,
             valid_schedule=valid_schedule,
+            tb_logger=tb_logger,
             exec_gcam_fn=exec_gcam_fn,
             exec_softmax_fn=exec_softmax_fn,
             save_cm_fn=save_cm_fn,
@@ -178,7 +175,11 @@ def run() -> None:
             impl.save_model(model, classes, gc, epoch)
 
     # validate / save
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, validate_model, collect_list)
+    trainer.add_event_handler(
+        Events.EPOCH_COMPLETED,
+        validate_model,
+        [(known_loader, State.KNOWN), (unknown_loader, State.UNKNOWN)],  # args
+    )
     trainer.add_event_handler(Events.EPOCH_COMPLETED, save_model)
 
     # kick everything off

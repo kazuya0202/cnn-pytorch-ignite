@@ -20,7 +20,7 @@ dataset:
   extensions: ["jpg", "png", "jpeg", "bmp", "gif"]
 
 gradcam:
-  enabled: true
+  enabled: false
   # enabled: false
   only_mistaken: false
   layer: "conv5"
@@ -43,21 +43,20 @@ network:
   is_save_final_model: false
 
   net_name: "Net" # ["Net", "LightNet"] in cnn.py
-  optim_name: "SGD"  # ["Adam", "RAdam", SGD]
+  optim_name: "SGD" # ["Adam", "RAdam", "SGD"]
 
   lr: 0.01
-  momentum: 0.9  # only `SGD`
+  momentum: 0.9 # only `SGD`
 
   amp: false # Automatic Mixed Precision
 
 option:
   is_show_network_difinition: true
-  is_show_batch_result: false
+  is_show_batch_result: true
 
   is_save_log: false
   is_save_mistaken_pred: false
   is_save_config: false
-  log_tensorboard: false
+  log_tensorboard: true
   is_save_cm: false # confusion matrix
-  is_save_softmax: true
-  # is_save_softmax: false
+  is_save_softmax: false

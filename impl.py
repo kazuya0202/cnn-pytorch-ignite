@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import ignite.contrib.handlers.tensorboard_logger as tbl
 import torch
@@ -12,6 +12,7 @@ from ignite.metrics.loss import Loss
 from ignite.metrics.metric import Metric
 from texttable import Texttable
 from torch.utils.data.dataloader import DataLoader
+from torch.utils.tensorboard.writer import SummaryWriter
 
 from gradcam import ExecuteGradCAM
 from modules import T
@@ -83,12 +84,12 @@ def validate_model(
     gcam: ExecuteGradCAM,
     model: tutils.Model,
     valid_schedule: List[bool],
+    tb_logger: Optional[SummaryWriter],
     *,
     exec_gcam_fn: fns.exec_gcam_fn_t = fns.dummy_execute_gradcam,  # from functions.py
     exec_softmax_fn: fns.exec_softmax_fn_t = fns.dummy_execute_softmax,  # from functions.py
     save_cm_fn: fns.save_cm_fn_t = fns.dummy_save_cm_image,  # from functions.py
     non_blocking: bool = True,
-    # tb_logger: Optional[tbl.TensorboardLogger],
 ) -> None:
     epoch = engine.state.epoch
     max_epochs = engine.state.max_epochs
@@ -160,6 +161,10 @@ def validate_model(
             gc.ratefile.write(f"{avg_acc},")
             table.add_row(["*", "[avg]", round(avg_acc, 3), "-"])
 
+            if tb_logger:
+                tb_logger.add_scalar(f"Accuracy/{phase}", avg_acc, epoch)
+                tb_logger.add_scalar(f"Loss/{phase}", avg_loss, epoch)
+
             pbar.log_message(f"\n{table.draw()}")
 
         softmaxfile.flush()
@@ -185,9 +190,10 @@ def save_model(model: tutils.Model, classes: List[str], gc: GlobalConfig, epoch:
 def attach_log_to_tensorboard(
     tb_logger: tbl.TensorboardLogger,
     trainer: Engine,
-    _list: List[Tuple[Engine, DataLoader, str]],
     model: tutils.Model,
+    _list: List[Tuple[DataLoader, str]],
 ) -> None:
+    return
     # attach_num = 1
 
     # tb_logger.attach_output_handler(
@@ -198,14 +204,14 @@ def attach_log_to_tensorboard(
     #     metric_names="all",  # type: ignore
     # )
 
-    for evaluator, _, tag in _list:
-        tb_logger.attach_output_handler(
-            evaluator,
-            event_name=Events.EPOCH_COMPLETED,
-            tag=tag,  # type: ignore
-            metric_names=["loss", "acc"],  # type: ignore
-            global_step_transform=tbl.global_step_from_engine(trainer),  # type: ignore
-        )
+    # for evaluator, _, tag in _list:
+    #     tb_logger.attach_output_handler(
+    #         evaluator,
+    #         event_name=Events.EPOCH_COMPLETED,
+    #         tag=tag,  # type: ignore
+    #         metric_names=["loss", "acc"],  # type: ignore
+    #         global_step_transform=tbl.global_step_from_engine(trainer),  # type: ignore
+    #     )
 
     # tb_logger.attach_opt_params_handler(
     #     trainer, event_name=Events.ITERATION_COMPLETED(every=attach_num), optimizer=model.optimizer  # type: ignore

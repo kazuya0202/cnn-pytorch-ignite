@@ -78,7 +78,7 @@ class Network_:
     is_save_final_model: bool = True
 
     net_name: str = "Net"
-    optim_name: str = "Adam"
+    optim_name: str = "SGD"
     net_: T._type_net = field(init=False, default=cnn.Net)
     optim_: T._type_optim = field(init=False, default=optim.Adam)
 
