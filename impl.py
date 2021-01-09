@@ -1,10 +1,8 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import ignite.contrib.handlers.tensorboard_logger as tbl
 import torch
 import torch.nn.functional as F
-from ignite.engine import Events
 from ignite.engine.engine import Engine
 from ignite.metrics.accuracy import Accuracy
 from ignite.metrics.confusion_matrix import ConfusionMatrix
@@ -12,7 +10,7 @@ from ignite.metrics.loss import Loss
 from ignite.metrics.metric import Metric
 from texttable import Texttable
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.tensorboard.writer import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 
 from gradcam import ExecuteGradCAM
 from modules import T
@@ -187,13 +185,13 @@ def save_model(model: tutils.Model, classes: List[str], gc: GlobalConfig, epoch:
     torch.save(save_cfg, path)
 
 
-def attach_log_to_tensorboard(
-    tb_logger: tbl.TensorboardLogger,
-    trainer: Engine,
-    model: tutils.Model,
-    _list: List[Tuple[DataLoader, str]],
-) -> None:
-    return
+# def attach_log_to_tensorboard(
+#     tb_logger: tbl.TensorboardLogger,
+#     trainer: Engine,
+#     model: tutils.Model,
+#     _list: List[Tuple[DataLoader, str]],
+# ) -> None:
+#     return
     # attach_num = 1
 
     # tb_logger.attach_output_handler(

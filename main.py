@@ -11,7 +11,7 @@ from ignite.engine import Events
 from ignite.engine.engine import Engine
 from torch import optim
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.tensorboard.writer import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import impl
