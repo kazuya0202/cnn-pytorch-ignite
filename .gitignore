@@ -4,10 +4,9 @@ GradCAM_results/
 logs/
 config/
 
-*result/**/
-*results/**/
+*result*/**/
+*results*/**/
 results/**/
-apex/
 
 ### Python
 

@@ -4,10 +4,10 @@ gpu_enabled: true
 img_root: C:/okamura/_cnn/yokoyama_test_images
 save_root: test_result
 
-height: 95
-width: 95
+height: 95 # this value is the same as input size
+width: 95 # this value is the same as input size
 channels: 3
-# class_name: Net
+# class_name: Net # unimplemented
 
 gradcam:
   enabled: true
