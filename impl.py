@@ -147,7 +147,7 @@ def validate_model(
             fig = utils.plot_confusion_matrix(cm, classes, title=title)
 
             save_cm_fn(gc.path.cm, phase, epoch, fig)
-            gc.ratefile.write(f",,")
+            gc.ratefile.write(",,")
 
             for i, cls_name in enumerate(classes):
                 n_all = sum(cm[i])

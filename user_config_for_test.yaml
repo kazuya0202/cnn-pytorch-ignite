@@ -1,9 +1,14 @@
-model: ""
+model_path: C:/okamura/_cnn/epoch30.pt
 gpu_enabled: true
 
-imgs: [""]
+img_root: C:/okamura/_cnn/yokoyama_test_images
+save_root: test_result
 
-height: 60
-width: 60
-chennels: 3
-class_name: "LightNet"
+height: 95
+width: 95
+channels: 3
+# class_name: Net
+
+gradcam:
+  enabled: true
+  layer: conv5

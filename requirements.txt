@@ -1,4 +1,6 @@
 # torch / torchvision
+# tensorboardX
+tensorflow
 pytorch-ignite
 pyyaml
 matplotlib
@@ -7,5 +9,4 @@ pillow
 scikit-learn
 tqdm
 numpy
-tensorboardX
 texttable

@@ -1,14 +1,16 @@
 path:
-  # dataset: "D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014"
-  # dataset: "D:\\workspace\\pro\\__dataset\\bird_by_yokoyama"
+  # dataset: D:\\workspace\\repos\\gitlab.com\\ichiya\\prcn2019-datasets\\datasets\\Images-20191014
+  # dataset: D:\\workspace\\pro\\__dataset\\bird_by_yokoyama
 
   is_pre_splited: true
-  train_dir: "D:/workspace/pro/__dataset/cnn_dataset_2020_12_24/TrainImage/"
-  valid_dir: "D:/workspace/pro/__dataset/cnn_dataset_2020_12_24/TestImage/"
+  # train_dir: D:/workspace/pro/__dataset/cnn_dataset_2020_12_24/TrainImage/
+  # valid_dir: D:/workspace/pro/__dataset/cnn_dataset_2020_12_24/TestImage/
+  train_dir: C:/okamura/_cnn/yokoyama_test_images
+  valid_dir: C:/okamura/_cnn/yokoyama_test_images
   # ^^^^^^^ this configs are only valid when `is_pre_splited` is true.
 
-  result_dir: "./results"
-  tb_log_dir: "./runs"
+  result_dir: ./results
+  tb_log_dir: ./runs
 
 dataset:
   # limit_size: 100
@@ -17,13 +19,13 @@ dataset:
   # ^^^^^^^^ this configs are only valid when `is_pre_splited` is false.
 
   is_shuffle_per_epoch: true
-  extensions: ["jpg", "png", "jpeg", "bmp", "gif"]
+  extensions: [jpg, png, jpeg, bmp, gif]
 
 gradcam:
   enabled: true
   # enabled: false
   only_mistaken: false
-  layer: "conv5"
+  layer: conv5
   cycle: 1
 
 network:
@@ -42,8 +44,8 @@ network:
   # is_save_final_model: true
   is_save_final_model: false
 
-  net_name: "Net" # ["Net", "LightNet"] in cnn.py
-  optim_name: "SGD" # ["Adam", "RAdam", "SGD"]
+  net_name: Net # [Net, LightNet] in cnn.py
+  optim_name: SGD # [Adam, RAdam, SGD]
 
   lr: 0.01
   momentum: 0.9 # only `SGD`

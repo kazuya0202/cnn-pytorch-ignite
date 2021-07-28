@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass, field
@@ -11,7 +12,11 @@ from PIL import Image
 from torch import Tensor
 from torchvision import transforms
 
+# from torchvision.utils import save_image
+
+import cnn  # noqa
 from modules import T
+from texttable import Texttable
 
 
 @dataclass
@@ -28,57 +33,92 @@ class Predict:
 
 
 @dataclass
+class TestConfig:
+    model_path: T._path = r""
+    gpu_enabled: bool = True
+    img_root: str = r""
+    save_root: str = r""
+
+    height: int = 60
+    width: int = 60
+    channels: int = 3
+    class_name: str = "Net"
+
+    imgs: List[Path] = field(init=False, default_factory=list)
+    class_: T._type_net = field(init=False)
+    input_size: Tuple[int, int] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.class_ = eval(f"cnn.{self.class_name}")
+        self.input_size = (self.height, self.width)
+
+        exts = ["jpg", "png", "jpeg", "bmp", "gif"]
+        root = Path(self.img_root)
+        for ext in exts:
+            self.imgs.extend(root.glob(f"*.{ext}"))
+
+
+@dataclass
 class ValidModel:
-    tc: "TestConfig"
+    cfg: TestConfig
     transform: Any = None
 
     classes: Dict[int, str] = field(init=False)
     classify_size: int = field(init=False)
+    # save_root: Path = field(init=False)
 
     def __post_init__(self) -> None:
         self.gpu_enabled = self.gpu_enabled and torch.cuda.is_available()  # type: ignore
         self.device = torch.device("cuda" if self.gpu_enabled else "cpu")
-        self.__load(self.tc.model)
+        self.__load(self.cfg.model_path)
 
         if self.transform is None:
             self.transform = transforms.Compose(
                 [
-                    transforms.Resize(self.tc.input_size),
+                    transforms.Resize(self.cfg.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                 ]
             )
 
+        if self.cfg.save_root == "":
+            self.cfg.save_root = "result"
+        self.save_root = Path(self.cfg.save_root)
+        self.save_root.mkdir(parents=True, exist_ok=True)
+
     def __load(self, path: T._path):
         check_existence(path)
 
-        cp = torch.load(path)
-        self.classes = cp["classes"]
+        ckpt = torch.load(path)
+        self.classes = ckpt["classes"]
         self.classify_size = len(self.classes)
 
         # network
-        self.net = self.tc.class_(
-            input_size=self.tc.input_size,
+        self.net = self.cfg.class_(
+            input_size=self.cfg.input_size,
             classify_size=self.classify_size,
-            in_channels=self.tc.channels,
+            in_channels=self.cfg.channels,
         )
-        self.net.load_state_dict(cp["model_state_dict"])
+        self.net.load_state_dict(ckpt["model_state_dict"])
 
         self.net = self.net.to(self.device)
         self.net.eval()
 
     def run(self) -> Iterator[Predict]:
-        for path in self.tc.imgs:
+        for path in self.cfg.imgs:
             yield self.valid(path)
 
-    def valid(self, img_path: str) -> Predict:
-        if not Path(img_path).exists():
+    def valid(self, img_path: Path) -> Predict:
+        if not img_path.exists():
             return Predict()
 
         with torch.no_grad():
             img = self.preprocess(img_path)
 
             x: Tensor = self.net(img)
+            # save_image(x, self.save_root / img_path.name)
+            # todo: save grad-cam image
+
             x_sm = F.softmax(x, -1)
             pred = torch.max(x_sm.data, 1)  # type: ignore
 
@@ -92,25 +132,6 @@ class ValidModel:
         img: Tensor = self.transform(img_pil)
         img = img.unsqueeze_(0).to(self.device)
         return img
-
-
-@dataclass
-class TestConfig:
-    model: T._path = r""
-    gpu_enabled: bool = True
-    imgs: List[str] = field(default_factory=list)
-
-    height: int = 60
-    width: int = 60
-    channels: int = 3
-    class_name: str = "Net"
-
-    class_: T._type_net = field(init=False)
-    input_size: Tuple[int, int] = field(init=False)
-
-    def __post_init__(self) -> None:
-        self.class_ = eval(f"cnn.{self.class_name}")
-        self.input_size = (self.height, self.width)
 
 
 def parse_arg() -> Namespace:
@@ -135,11 +156,15 @@ def check_existence(path: T._path) -> None:
 
 if __name__ == "__main__":
     args = parse_arg()
-    tc = parse_yaml(args.cfg)
+    cfg = parse_yaml(args.cfg)
+
+    save_root = Path(cfg.save_root)
+    runtime_str = datetime.now().strftime("%Y-%m-%d_%Hh%Mm%Ss")
+    # softmax_file = oepn("")
 
     # transform = ...
     transform = None
-    model = ValidModel(tc, transform)
+    model = ValidModel(cfg, transform)
 
     for x in model.run():
         if x.is_pred:

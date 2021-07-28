@@ -25,66 +25,66 @@ from modules.global_config import GlobalConfig
 
 def run() -> None:
     transform = Compose(
-        [Resize(gc.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        [Resize(cfg.network.input_size), ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
         # [Resize(gc.network.input_size), ToTensor(), Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))]
     )
     cudnn.benchmark = True
 
-    gc.check_dataset_path(is_show=True)
-    dataset = tutils.CreateDataset(gc)  # train, unknown, known
+    cfg.check_dataset_path(is_show=True)
+    dataset = tutils.CreateDataset(cfg)  # train, unknown, known
 
     train_loader, unknown_loader, known_loader = dataset.get_dataloader(transform)
 
-    if gc.option.is_save_config:
+    if cfg.option.is_save_config:
         dataset.write_config()  # write config of model
     del dataset.all_list
 
     classes = list(dataset.classes.values())
-    device = gc.network.device
+    device = cfg.network.device
 
-    print(f"Building network by '{gc.network.net_.__name__}'...")
-    net = gc.network.net_(input_size=gc.network.input_size, classify_size=len(classes)).to(device)
-    if isinstance(gc.network.optim_, optim.SGD):
-        optimizer = gc.network.optim_(
-            net.parameters(), lr=gc.network.lr, momentum=gc.network.momentum
+    print(f"Building network by '{cfg.network.net_.__name__}'...")
+    net = cfg.network.net_(input_size=cfg.network.input_size, classify_size=len(classes)).to(device)
+    if isinstance(cfg.network.optim_, optim.SGD):
+        optimizer = cfg.network.optim_(
+            net.parameters(), lr=cfg.network.lr, momentum=cfg.network.momentum
         )
     else:
-        optimizer = gc.network.optim_(net.parameters(), lr=gc.network.lr)
+        optimizer = cfg.network.optim_(net.parameters(), lr=cfg.network.lr)
 
     model = tutils.Model(
         net,
         optimizer=optimizer,
         criterion=nn.CrossEntropyLoss(),
         device=device,
-        scaler=amp.GradScaler(enabled=gc.network.amp),
+        scaler=amp.GradScaler(enabled=cfg.network.amp),
     )
     del net, optimizer
 
     # logfile
-    if gc.option.is_save_log:
-        gc.logfile = utils.LogFile(gc.path.log.joinpath("log.txt"), stdout=False)
-        gc.ratefile = utils.LogFile(gc.path.log.joinpath("rate.csv"), stdout=False)
+    if cfg.option.is_save_log:
+        cfg.logfile = utils.LogFile(cfg.path.log.joinpath("log.txt"), stdout=False)
+        cfg.ratefile = utils.LogFile(cfg.path.log.joinpath("rate.csv"), stdout=False)
 
         classes_ = ",".join(classes)
-        gc.ratefile.writeline(f"epoch,known,{classes_},avg,,unknown,{classes_},avg")
-        gc.ratefile.flush()
+        cfg.ratefile.writeline(f"epoch,known,{classes_},avg,,unknown,{classes_},avg")
+        cfg.ratefile.flush()
 
     # netword difinition
-    impl.show_network_difinition(gc, model, dataset, stdout=gc.option.is_show_network_difinition)
+    impl.show_network_difinition(cfg, model, dataset, stdout=cfg.option.is_show_network_difinition)
 
     # grad cam
     gcam_schedule = (
-        utils.create_schedule(gc.network.epoch, gc.gradcam.cycle)
-        if gc.gradcam.enabled
-        else [False] * gc.network.epoch
+        utils.create_schedule(cfg.network.epoch, cfg.gradcam.cycle)
+        if cfg.gradcam.enabled
+        else [False] * cfg.network.epoch
     )
     gcam = ExecuteGradCAM(
         classes,
-        input_size=gc.network.input_size,
-        target_layer=gc.gradcam.layer,
+        input_size=cfg.network.input_size,
+        target_layer=cfg.gradcam.layer,
         device=device,
         schedule=gcam_schedule,
-        is_gradcam=gc.gradcam.enabled,
+        is_gradcam=cfg.gradcam.enabled,
     )
 
     # mkdir for gradcam
@@ -95,25 +95,25 @@ def run() -> None:
             continue
         ep_str = f"epoch{i+1}"
         for phase, cls in product(phases, classes):
-            gc.path.gradcam.joinpath(f"{phase}_mistaken", ep_str, cls).mkdir(**mkdir_options)
-        if not gc.gradcam.only_mistaken:
+            cfg.path.gradcam.joinpath(f"{phase}_mistaken", ep_str, cls).mkdir(**mkdir_options)
+        if not cfg.gradcam.only_mistaken:
             for phase, cls in product(phases, classes):
-                gc.path.gradcam.joinpath(f"{phase}_correct", ep_str, cls).mkdir(**mkdir_options)
+                cfg.path.gradcam.joinpath(f"{phase}_correct", ep_str, cls).mkdir(**mkdir_options)
 
     # progress bar
     pbar = utils.MyProgressBar(
-        persist=True, logfile=gc.logfile, disable=gc.option.is_show_batch_result
+        persist=True, logfile=cfg.logfile, disable=cfg.option.is_show_batch_result
     )
 
     # dummy functions
-    exec_gcam_fn = fns.execute_gradcam if gc.gradcam.enabled else fns.dummy_execute_gradcam
+    exec_gcam_fn = fns.execute_gradcam if cfg.gradcam.enabled else fns.dummy_execute_gradcam
     save_img_fn = (
         fns.save_mistaken_image
-        if gc.option.is_save_mistaken_pred
+        if cfg.option.is_save_mistaken_pred
         else fns.dummy_save_mistaken_image
     )
     exec_softmax_fn = (
-        fns.execute_softmax if gc.option.is_save_softmax else fns.dummy_execute_softmax
+        fns.execute_softmax if cfg.option.is_save_softmax else fns.dummy_execute_softmax
     )
 
     def train_step(engine: Engine, batch: T._batch_path) -> float:
@@ -121,10 +121,10 @@ def run() -> None:
             engine,
             tutils.MiniBatch(batch),
             model,
-            gc.network.subdivisions,
-            gc,
+            cfg.network.subdivisions,
+            cfg,
             pbar,
-            use_amp=gc.network.amp,
+            use_amp=cfg.network.amp,
             save_img_fn=save_img_fn,
             non_blocking=True,
         )
@@ -135,17 +135,17 @@ def run() -> None:
 
     # tensorboard logger
     tb_logger = (
-        SummaryWriter(log_dir=str(Path(gc.path.tb_log_dir, gc.filename_base)))
-        if gc.option.log_tensorboard
+        SummaryWriter(log_dir=str(Path(cfg.path.tb_log_dir, cfg.filename_base)))
+        if cfg.option.log_tensorboard
         else None
     )
 
     # schedule
-    valid_schedule = utils.create_schedule(gc.network.epoch, gc.network.valid_cycle)
-    save_schedule = utils.create_schedule(gc.network.epoch, gc.network.save_cycle)
-    save_schedule[-1] = gc.network.is_save_final_model  # depends on config.
+    valid_schedule = utils.create_schedule(cfg.network.epoch, cfg.network.valid_cycle)
+    save_schedule = utils.create_schedule(cfg.network.epoch, cfg.network.save_cycle)
+    save_schedule[-1] = cfg.network.is_save_final_model  # depends on config.
 
-    save_cm_fn = fns.save_cm_image if gc.option.is_save_cm else fns.dummy_save_cm_image
+    save_cm_fn = fns.save_cm_image if cfg.option.is_save_cm else fns.dummy_save_cm_image
 
     def validate_model(engine: Engine, collect_list: List[Tuple[DataLoader, str]]) -> None:
         epoch = engine.state.epoch
@@ -156,7 +156,7 @@ def run() -> None:
         impl.validate_model(
             engine,
             collect_list,
-            gc,
+            cfg,
             pbar,
             classes,
             gcam=gcam,
@@ -172,7 +172,7 @@ def run() -> None:
     def save_model(engine: Engine) -> None:
         epoch = engine.state.epoch
         if save_schedule[epoch - 1]:
-            impl.save_model(model, classes, gc, epoch)
+            impl.save_model(model, classes, cfg, epoch)
 
     # validate / save
     trainer.add_event_handler(
@@ -183,14 +183,14 @@ def run() -> None:
     trainer.add_event_handler(Events.EPOCH_COMPLETED, save_model)
 
     # kick everything off
-    trainer.run(train_loader, max_epochs=gc.network.epoch)
+    trainer.run(train_loader, max_epochs=cfg.network.epoch)
 
     # close file
-    if gc.option.log_tensorboard:
+    if cfg.option.log_tensorboard and tb_logger:
         tb_logger.close()
-    if gc.option.is_save_log:
-        gc.logfile.close()
-        gc.ratefile.close()
+    if cfg.option.is_save_log:
+        cfg.logfile.close()
+        cfg.ratefile.close()
 
 
 def parse_yaml(path: str) -> GlobalConfig:
@@ -209,6 +209,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print(f"Loading config from '{args.cfg}'...")
-    gc = parse_yaml(path=args.cfg)
+    cfg = parse_yaml(path=args.cfg)
 
     run()
