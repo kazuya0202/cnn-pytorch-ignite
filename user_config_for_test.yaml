@@ -4,8 +4,8 @@ gpu_enabled: true
 img_root: C:/okamura/_cnn/yokoyama_test_images
 save_root: test_result
 
-height: 95
-width: 95
+height: 60
+width: 60
 channels: 3
 # class_name: Net
 
