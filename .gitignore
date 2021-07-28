@@ -4,6 +4,8 @@ GradCAM_results/
 logs/
 config/
 
+*result/**/
+*results/**/
 results/**/
 apex/
 
